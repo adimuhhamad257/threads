@@ -36,6 +36,24 @@ function serializeForClient(obj) {
 }
 
 /**
+ * Shared Helper: Normalisasi nilai tanggal menjadi string ISO 8601 UTC murni
+ */
+function toIsoUtcString(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    return isNaN(val.getTime()) ? '' : val.toISOString();
+  }
+  var sVal = String(val).trim();
+  if (!sVal) return '';
+  // Jika format datetime-local tanpa offset timezone "YYYY-MM-DDTHH:mm", asumsikan WIB (UTC+7)
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(sVal)) {
+    sVal += '+07:00';
+  }
+  var d = new Date(sVal);
+  return isNaN(d.getTime()) ? '' : d.toISOString();
+}
+
+/**
  * Normalizes rows into JSON objects using header row 1
  */
 function readSheetAsJson(sheetName) {
@@ -46,20 +64,26 @@ function readSheetAsJson(sheetName) {
   if (values.length <= 1) return [];
   var headers = values[0];
   var result = [];
+  var dateCols = ['scheduled_at', 'created_at', 'view_check_until', 'published_at', 'token_expires_at', 'last_synced_at'];
+
   for (var i = 1; i < values.length; i++) {
     var row = values[i];
     var item = {};
     var hasContent = false;
     for (var j = 0; j < headers.length; j++) {
       var val = row[j];
+      var headerName = headers[j];
       if (val instanceof Date) {
-        if (headers[j] === 'generation_time') {
+        if (headerName === 'generation_time') {
           val = Utilities.formatDate(val, 'Asia/Jakarta', 'HH:mm');
         } else {
           val = val.toISOString();
         }
       }
-      if (headers[j] === 'generation_time' && val) {
+      if (dateCols.indexOf(headerName) !== -1 && val) {
+        val = toIsoUtcString(val);
+      }
+      if (headerName === 'generation_time' && val) {
         var mGenTime = String(val).match(/(\d{1,2}):(\d{2})/);
         if (mGenTime) {
           val = ('0' + mGenTime[1]).slice(-2) + ':' + mGenTime[2];
@@ -67,10 +91,10 @@ function readSheetAsJson(sheetName) {
           val = '05:00';
         }
       }
-      if (headers[j] === 'is_active') {
+      if (headerName === 'is_active') {
         val = (val === true || String(val).toUpperCase() === 'TRUE') ? 'TRUE' : 'FALSE';
       }
-      item[headers[j]] = (val === '' ? null : val);
+      item[headerName] = (val === '' ? null : val);
       if (val !== '' && val !== null) hasContent = true;
     }
     if (hasContent) result.push(item);
@@ -219,7 +243,55 @@ function setupDatabase() {
     }
   }
 
+  ensureRepliedColumn(ss);
+
   return { ok: true, message: 'Database schema successfully initialized/updated.' };
+}
+
+/**
+ * Pemeliharaan skema & normalisasi kolom komentar Post_Comments secara terjadwal/startup
+ */
+function ensureRepliedColumn(ss) {
+  var sheet = ss.getSheetByName('Post_Comments');
+  if (!sheet) return;
+  var lastCol = sheet.getLastColumn();
+  if (lastCol === 0) return;
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var statusCol = headers.indexOf('status');
+  var replyCol = headers.indexOf('reply_text');
+
+  if (statusCol === -1) {
+    sheet.getRange(1, headers.length + 1).setValue('status');
+    headers.push('status');
+  }
+  if (replyCol === -1) {
+    sheet.getRange(1, headers.length + 1).setValue('reply_text');
+    headers.push('reply_text');
+  }
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    var dateColIdx = headers.indexOf('created_at');
+    if (dateColIdx !== -1) {
+      var dateRange = sheet.getRange(2, dateColIdx + 1, lastRow - 1, 1);
+      var dateVals = dateRange.getValues();
+      var changed = false;
+      var nowIso = new Date().toISOString();
+      for (var r = 0; r < dateVals.length; r++) {
+        var dVal = dateVals[r][0];
+        if (typeof dVal === 'number' && dVal > 2000000000000) {
+          dateVals[r][0] = nowIso;
+          changed = true;
+        } else if (dVal instanceof Date) {
+          dateVals[r][0] = dVal.toISOString();
+          changed = true;
+        }
+      }
+      if (changed) {
+        dateRange.setValues(dateVals);
+      }
+    }
+  }
 }
 
 /**
@@ -891,6 +963,19 @@ function savePostWithChains(postData, chains) {
         return { ok: false, message: 'Akun Threads tidak terdaftar di sistem' };
       }
 
+      var loc = findPostRowLocation(ss, postId);
+      var existingStatus = loc && loc.rowValues ? String(loc.rowValues[6] || '') : '';
+      var existingCheckUntil = loc && loc.rowValues ? String(loc.rowValues[8] || '') : '';
+
+      // Anti-downgrade: jika status eksisting sudah Waiting Views, pertahankan status tersebut
+      var targetStatus = postData.status || 'Scheduled';
+      if (existingStatus === 'Waiting Views') {
+        targetStatus = 'Waiting Views';
+        if (existingCheckUntil) {
+          viewCheckUntil = existingCheckUntil;
+        }
+      }
+
       var postRow = {
         post_id: postId,
         account_id: editAccId,
@@ -898,20 +983,18 @@ function savePostWithChains(postData, chains) {
         publishing_mode: postData.publishing_mode,
         interval_minutes: postData.interval_minutes || 3,
         target_views: isInterval ? '' : (postData.target_views || 100),
-        status: postData.status || 'Scheduled',
-        scheduled_at: postData.scheduled_at || nowIso,
-        view_check_until: viewCheckUntil,
+        status: targetStatus,
+        scheduled_at: toIsoUtcString(postData.scheduled_at) || nowIso,
+        view_check_until: toIsoUtcString(viewCheckUntil),
         is_evergreen: postData.is_evergreen || 'FALSE',
         error_log: '',
-        created_at: nowIso
+        created_at: toIsoUtcString(loc ? loc.rowValues[11] : nowIso) || nowIso
       };
 
-      var loc = findPostRowLocation(ss, postId);
       var isTargetPublished = (postRow.status === 'Published' || postRow.status === 'Failed');
       var targetSheetName = isTargetPublished ? 'Published_Posts' : 'Queue_Posts';
 
       if (loc) {
-        postRow.created_at = loc.rowValues[11] || nowIso;
         if (loc.sheetName === targetSheetName) {
           var headers = loc.headers;
           var updateRow = [];
@@ -927,29 +1010,40 @@ function savePostWithChains(postData, chains) {
         appendRowData(targetSheetName, postRow);
       }
 
-      // Hapus & timpa rantai utas untuk post yang diedit
+      // Simpan metadata rantai yang sudah terbit sebelum pembaruan teks
+      var existingChainsMap = {};
       var cValues = chainsSheet.getDataRange().getValues();
       for (var j = cValues.length - 1; j >= 1; j--) {
         if (String(cValues[j][1]) === postId) {
+          var seq = Number(cValues[j][2]);
+          existingChainsMap[seq] = {
+            chain_id: cValues[j][0],
+            temp_container_id: cValues[j][5] || '',
+            threads_post_id: cValues[j][6] || '',
+            permalink: cValues[j][7] || '',
+            published_at: cValues[j][8] || ''
+          };
           chainsSheet.deleteRow(j + 1);
         }
       }
 
       for (var i = 0; i < chains.length; i++) {
         var c = chains[i];
-        var chainId = c.chain_id || ('chn_' + Utilities.getUuid().slice(0, 8));
+        var seqNum = i + 1;
+        var prevMeta = existingChainsMap[seqNum] || {};
+        var chainId = c.chain_id || prevMeta.chain_id || ('chn_' + Utilities.getUuid().slice(0, 8));
         var snapshotList = createMediaSnapshot(c.media_ids || [], mediaRows);
         var mediaIdsJson = JSON.stringify(snapshotList);
         chainsSheet.appendRow([
           chainId,
           postId,
-          i + 1,
+          seqNum,
           c.content_text,
           mediaIdsJson,
-          c.temp_container_id || '',
-          c.threads_post_id || '',
-          c.permalink || '',
-          c.published_at || ''
+          c.temp_container_id || prevMeta.temp_container_id || '',
+          c.threads_post_id || prevMeta.threads_post_id || '',
+          c.permalink || prevMeta.permalink || '',
+          toIsoUtcString(c.published_at || prevMeta.published_at)
         ]);
       }
 
@@ -997,8 +1091,8 @@ function savePostWithChains(postData, chains) {
         interval_minutes: postData.interval_minutes || 3,
         target_views: isInterval ? '' : (postData.target_views || 100),
         status: postData.status || 'Scheduled',
-        scheduled_at: postData.scheduled_at || nowIso,
-        view_check_until: viewCheckUntil,
+        scheduled_at: toIsoUtcString(postData.scheduled_at) || nowIso,
+        view_check_until: toIsoUtcString(viewCheckUntil),
         is_evergreen: postData.is_evergreen || 'FALSE',
         error_log: '',
         created_at: nowIso
@@ -1866,8 +1960,7 @@ function updateCommentStatus(commentId, newStatus) {
     var statusCol = headers.indexOf('status');
 
     if (statusCol === -1) {
-      commSheet.getRange(1, headers.length + 1).setValue('status');
-      statusCol = headers.length;
+      statusCol = 6;
     }
 
     for (var i = 1; i < commRows.length; i++) {
@@ -2086,6 +2179,13 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
         }
         currentSheet.getRange(pIdx, 7).setValue('Waiting Views');
         currentSheet.getRange(pIdx, 11).setValue('');
+
+        var currentCheckUntil = currentSheet.getRange(pIdx, 9).getValue();
+        if (!currentCheckUntil || String(currentCheckUntil).trim() === '') {
+          var defaultCheckUntil = new Date(new Date().getTime() + 48 * 60 * 60 * 1000).toISOString();
+          currentSheet.getRange(pIdx, 9).setValue(defaultCheckUntil);
+        }
+
         return { ok: true, status: 'Waiting Views', message: 'Utas #1 berhasil terbit! Utas #2 menunggu target views tercapai.' };
       }
 
@@ -2234,7 +2334,10 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
  */
 function processPublishingQueue() {
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(5000)) return;
+  if (!lock.tryLock(30000)) {
+    Logger.log('processPublishingQueue dilewati: lock tidak tersedia setelah menunggu 30 detik.');
+    return;
+  }
 
   try {
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -2281,6 +2384,13 @@ function processPublishingQueue() {
               break;
             }
           }
+        }
+
+        // Batas waktu Waiting Views: jika kosong, isi default now + 48 jam
+        if (!checkUntilDate) {
+          checkUntilDate = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+          checkUntilStr = checkUntilDate.toISOString();
+          queueSheet.getRange(pIdx + 1, 9).setValue(checkUntilStr);
         }
 
         var isTimeout = checkUntilDate && now.getTime() >= checkUntilDate.getTime();

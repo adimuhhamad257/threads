@@ -4196,18 +4196,43 @@
           ]
         },
 
+        isoToWibInputString: function(isoStr) {
+          if (!isoStr) return '';
+          var d = new Date(isoStr);
+          if (isNaN(d.getTime())) return '';
+          var parts = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Jakarta',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hourCycle: 'h23'
+          }).formatToParts(d);
+          var m = {};
+          parts.forEach(function(p) { m[p.type] = p.value; });
+          return m.year + '-' + m.month + '-' + m.day + 'T' + m.hour + ':' + m.minute;
+        },
+
         getFutureDateTimeString: function(offsetMinutes) {
           var min = offsetMinutes !== undefined ? offsetMinutes : 15;
           var d = new Date(Date.now() + min * 60 * 1000);
-          var y = d.getFullYear();
-          var m = ('0' + (d.getMonth() + 1)).slice(-2);
-          var day = ('0' + d.getDate()).slice(-2);
-          var h = ('0' + d.getHours()).slice(-2);
-          var mi = ('0' + d.getMinutes()).slice(-2);
-          return y + '-' + m + '-' + day + 'T' + h + ':' + mi;
+          var parts = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Jakarta',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hourCycle: 'h23'
+          }).formatToParts(d);
+          var m = {};
+          parts.forEach(function(p) { m[p.type] = p.value; });
+          return m.year + '-' + m.month + '-' + m.day + 'T' + m.hour + ':' + m.minute;
         },
 
         initApp: function() {
+          this.restoreActiveTab();
           this.restoreDailyQueueFilters();
           this.refreshAllData();
           this.fetchTriggerStatus();
@@ -4218,6 +4243,12 @@
           }
 
           var self = this;
+          this.$watch('currentTab', function(newTab) {
+            try {
+              localStorage.setItem('threadchain_active_tab', newTab);
+            } catch (e) {}
+          });
+
           this.$watch('composer', function(newVal) {
             if (!newVal.post_id) {
               try {
@@ -4315,8 +4346,21 @@
           setTimeout(function() { self.toast.show = false; }, 4000);
         },
 
+        restoreActiveTab: function() {
+          try {
+            var savedTab = localStorage.getItem('threadchain_active_tab');
+            var validTabs = ['dashboard', 'all_posts', 'composer', 'inbox_comments', 'daily_queue', 'products', 'viral_library', 'accounts', 'settings', 'training_memory', 'prompt_editor'];
+            if (savedTab && validTabs.indexOf(savedTab) !== -1) {
+              this.currentTab = savedTab;
+            }
+          } catch (e) {}
+        },
+
         switchTab: function(tab) {
           this.currentTab = tab;
+          try {
+            localStorage.setItem('threadchain_active_tab', tab);
+          } catch (e) {}
           this.mobileMenuOpen = false;
           if (tab === 'composer' && (!this.composer.scheduled_at || new Date(this.composer.scheduled_at).getTime() <= Date.now())) {
             this.composer.scheduled_at = this.getFutureDateTimeString(15);
@@ -5803,7 +5847,14 @@
         formatDate: function(isoStr) {
           if (!isoStr) return '-';
           var d = new Date(isoStr);
-          return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+          if (isNaN(d.getTime())) return '-';
+          return d.toLocaleDateString('id-ID', {
+            timeZone: 'Asia/Jakarta',
+            day: '2-digit',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
         },
 
         formatRupiah: function(num) {
@@ -6732,6 +6783,15 @@
           var firstChainProducts = (this.composer.chains[0] && Array.isArray(this.composer.chains[0].product_ids)) ? this.composer.chains[0].product_ids : [];
           var primaryProduct = this.composer.product_id || (firstChainProducts.length > 0 ? firstChainProducts[0] : (this.composer.chains[0] && this.composer.chains[0].product_id)) || '';
 
+          var schedIso = '';
+          if (this.composer.scheduled_at) {
+            var dSched = new Date(this.composer.scheduled_at);
+            if (!isNaN(dSched.getTime())) {
+              schedIso = dSched.toISOString();
+            }
+          }
+          if (!schedIso) schedIso = new Date().toISOString();
+
           var self = this;
           var postPayload = {
             post_id: this.composer.post_id || '',
@@ -6742,7 +6802,7 @@
             interval_minutes: this.composer.interval_minutes,
             target_views: this.composer.target_views,
             status: status,
-            scheduled_at: this.composer.scheduled_at
+            scheduled_at: schedIso
           };
 
           google.script.run
@@ -6867,7 +6927,7 @@
           this.composer.publishing_mode = post.publishing_mode || 'interval';
           this.composer.interval_minutes = Number(post.interval_minutes || 3);
           this.composer.target_views = Number(post.target_views || 100);
-          this.composer.scheduled_at = post.scheduled_at ? post.scheduled_at.slice(0, 16) : '';
+          this.composer.scheduled_at = this.isoToWibInputString(post.scheduled_at);
 
           var chains = this.getPostChains(post.post_id);
           chains.sort(function(a, b) { return Number(a.sequence_order) - Number(b.sequence_order); });
