@@ -123,7 +123,11 @@ function setupDatabase() {
       headers: ['media_id', 'batch_id', 'product_id', 'media_type', 'cloudinary_url', 'thumbnail_url', 'cloudinary_public_id', 'created_at']
     },
     {
-      name: 'Posts',
+      name: 'Queue_Posts',
+      headers: ['post_id', 'account_id', 'product_id', 'publishing_mode', 'interval_minutes', 'target_views', 'status', 'scheduled_at', 'view_check_until', 'is_evergreen', 'error_log', 'created_at']
+    },
+    {
+      name: 'Published_Posts',
       headers: ['post_id', 'account_id', 'product_id', 'publishing_mode', 'interval_minutes', 'target_views', 'status', 'scheduled_at', 'view_check_until', 'is_evergreen', 'error_log', 'created_at']
     },
     {
@@ -151,6 +155,28 @@ function setupDatabase() {
   var oldAutoSheet = ss.getSheetByName('Autopilot_Rules');
   if (oldAutoSheet) {
     ss.deleteSheet(oldAutoSheet);
+  }
+
+  // Migrasi otomatis data lama dari tabel Posts ke Queue_Posts & Published_Posts
+  var oldPostsSheet = ss.getSheetByName('Posts');
+  if (oldPostsSheet) {
+    var oldValues = oldPostsSheet.getDataRange().getValues();
+    if (oldValues.length > 1) {
+      var oldHeaders = oldValues[0];
+      var statusCol = oldHeaders.indexOf('status');
+      var qSheet = ss.getSheetByName('Queue_Posts') || ss.insertSheet('Queue_Posts');
+      var pSheet = ss.getSheetByName('Published_Posts') || ss.insertSheet('Published_Posts');
+      for (var r = 1; r < oldValues.length; r++) {
+        var row = oldValues[r];
+        var st = statusCol >= 0 ? String(row[statusCol]) : '';
+        if (st === 'Published' || st === 'Failed') {
+          pSheet.appendRow(row);
+        } else {
+          qSheet.appendRow(row);
+        }
+      }
+    }
+    ss.deleteSheet(oldPostsSheet);
   }
 
   for (var i = 0; i < schemas.length; i++) {
@@ -197,6 +223,40 @@ function setupDatabase() {
 }
 
 /**
+ * Helper: Membaca seluruh data postingan gabungan (Antrean Queue + Arsip Terbit)
+ */
+function getAllPostsAsJson() {
+  var q = readSheetAsJson('Queue_Posts');
+  var p = readSheetAsJson('Published_Posts');
+  var legacy = readSheetAsJson('Posts');
+  return [].concat(q, p, legacy);
+}
+
+/**
+ * Helper: Mencari lokasi spesifik baris postingan di spreadsheet
+ */
+function findPostRowLocation(ss, postId) {
+  var targetSheets = ['Queue_Posts', 'Published_Posts', 'Posts'];
+  for (var s = 0; s < targetSheets.length; s++) {
+    var sheet = ss.getSheetByName(targetSheets[s]);
+    if (!sheet) continue;
+    var values = sheet.getDataRange().getValues();
+    for (var r = 1; r < values.length; r++) {
+      if (String(values[r][0]) === String(postId)) {
+        return {
+          sheet: sheet,
+          sheetName: targetSheets[s],
+          rowIndex: r + 1,
+          headers: values[0],
+          rowValues: values[r]
+        };
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Read Initial State for Frontend
  */
 function getInitialData() {
@@ -209,15 +269,23 @@ function getInitialData() {
 
     var accounts = readSheetAsJson('Accounts');
     var products = readSheetAsJson('Products');
-    var posts = readSheetAsJson('Posts');
+    var queuePosts = readSheetAsJson('Queue_Posts');
+    var publishedPosts = readSheetAsJson('Published_Posts');
+    var posts = getAllPostsAsJson();
 
-    // Urutkan data: akun & produk terbaru; postingan aktif (Published & Waiting Views) diprioritaskan di baris teratas
     accounts.sort(function(a, b) { return new Date(b.created_at || 0) - new Date(a.created_at || 0); });
     products.sort(function(a, b) { return new Date(b.created_at || 0) - new Date(a.created_at || 0); });
     posts.sort(function(a, b) {
-      var isLiveA = (a.status === 'Published' || a.status === 'Waiting Views') ? 1 : 0;
-      var isLiveB = (b.status === 'Published' || b.status === 'Waiting Views') ? 1 : 0;
-      if (isLiveA !== isLiveB) return isLiveB - isLiveA;
+      var getPri = function(item) {
+        if (item.status === 'Waiting Views') return 5;
+        if (item.status === 'Processing') return 4;
+        if (item.status === 'Scheduled') return 3;
+        if (item.status === 'Published') return 2;
+        return 1;
+      };
+      var pA = getPri(a);
+      var pB = getPri(b);
+      if (pA !== pB) return pB - pA;
       return new Date(b.scheduled_at || b.created_at || 0) - new Date(a.scheduled_at || a.created_at || 0);
     });
 
@@ -230,6 +298,8 @@ function getInitialData() {
       mediaBatches: readSheetAsJson('Media_Batches'),
       mediaFiles: readSheetAsJson('Media_Files'),
       posts: posts,
+      queuePosts: queuePosts,
+      publishedPosts: publishedPosts,
       postChains: readSheetAsJson('Post_Chains'),
       viralLibrary: viralLibrary,
       postAnalytics: readSheetAsJson('Post_Analytics'),
@@ -775,7 +845,6 @@ function savePostWithChains(postData, chains) {
     }
 
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    var postsSheet = ss.getSheetByName('Posts');
     var chainsSheet = ss.getSheetByName('Post_Chains');
     var mediaSheet = ss.getSheetByName('Media_Files');
     var mediaRows = mediaSheet ? mediaSheet.getDataRange().getValues() : [];
@@ -837,25 +906,25 @@ function savePostWithChains(postData, chains) {
         created_at: nowIso
       };
 
-      var pValues = postsSheet.getDataRange().getValues();
-      var existingRowIdx = -1;
-      for (var p = 1; p < pValues.length; p++) {
-        if (String(pValues[p][0]) === postId) {
-          existingRowIdx = p + 1;
-          postRow.created_at = pValues[p][11] || nowIso;
-          break;
-        }
-      }
+      var loc = findPostRowLocation(ss, postId);
+      var isTargetPublished = (postRow.status === 'Published' || postRow.status === 'Failed');
+      var targetSheetName = isTargetPublished ? 'Published_Posts' : 'Queue_Posts';
 
-      if (existingRowIdx > 0) {
-        var headers = pValues[0];
-        var updateRow = [];
-        for (var h = 0; h < headers.length; h++) {
-          updateRow.push(postRow[headers[h]] !== undefined ? postRow[headers[h]] : '');
+      if (loc) {
+        postRow.created_at = loc.rowValues[11] || nowIso;
+        if (loc.sheetName === targetSheetName) {
+          var headers = loc.headers;
+          var updateRow = [];
+          for (var h = 0; h < headers.length; h++) {
+            updateRow.push(postRow[headers[h]] !== undefined ? postRow[headers[h]] : '');
+          }
+          loc.sheet.getRange(loc.rowIndex, 1, 1, updateRow.length).setValues([updateRow]);
+        } else {
+          loc.sheet.deleteRow(loc.rowIndex);
+          appendRowData(targetSheetName, postRow);
         }
-        postsSheet.getRange(existingRowIdx, 1, 1, updateRow.length).setValues([updateRow]);
       } else {
-        appendRowData('Posts', postRow);
+        appendRowData(targetSheetName, postRow);
       }
 
       // Hapus & timpa rantai utas untuk post yang diedit
@@ -934,7 +1003,7 @@ function savePostWithChains(postData, chains) {
         error_log: '',
         created_at: nowIso
       };
-      appendRowData('Posts', newPostRow);
+      appendRowData('Queue_Posts', newPostRow);
 
       for (var ch = 0; ch < chains.length; ch++) {
         var chainItem = chains[ch];
@@ -964,20 +1033,18 @@ function savePostWithChains(postData, chains) {
 function deletePost(postId) {
   try {
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    var postsSheet = ss.getSheetByName('Posts');
-    var pValues = postsSheet.getDataRange().getValues();
-    for (var i = 1; i < pValues.length; i++) {
-      if (String(pValues[i][0]) === String(postId)) {
-        postsSheet.deleteRow(i + 1);
-        break;
-      }
+    var loc = findPostRowLocation(ss, postId);
+    if (loc) {
+      loc.sheet.deleteRow(loc.rowIndex);
     }
 
     var chainSheet = ss.getSheetByName('Post_Chains');
-    var cValues = chainSheet.getDataRange().getValues();
-    for (var j = cValues.length - 1; j >= 1; j--) {
-      if (String(cValues[j][1]) === String(postId)) {
-        chainSheet.deleteRow(j + 1);
+    if (chainSheet) {
+      var cValues = chainSheet.getDataRange().getValues();
+      for (var j = cValues.length - 1; j >= 1; j--) {
+        if (String(cValues[j][1]) === String(postId)) {
+          chainSheet.deleteRow(j + 1);
+        }
       }
     }
     return { ok: true };
@@ -991,7 +1058,7 @@ function deletePost(postId) {
  */
 function suggestBestPostingTime(accountId) {
   try {
-    var posts = readSheetAsJson('Posts');
+    var posts = getAllPostsAsJson();
     var sRows = readSheetAsJson('Settings');
     var settingsMap = {};
     for (var s = 0; s < sRows.length; s++) {
@@ -1096,7 +1163,7 @@ function suggestBestPostingTime(accountId) {
  */
 function clonePostToAccount(sourcePostId, targetAccountId, rewriteWithAi) {
   try {
-    var posts = readSheetAsJson('Posts');
+    var posts = getAllPostsAsJson();
     var chains = readSheetAsJson('Post_Chains');
 
     var sourcePost = null;
@@ -1529,7 +1596,7 @@ function syncAllInsightsNow() {
 function syncSinglePostInsights(postId) {
   try {
     var chains = readSheetAsJson('Post_Chains');
-    var posts = readSheetAsJson('Posts');
+    var posts = getAllPostsAsJson();
     var post = null;
     for (var p = 0; p < posts.length; p++) {
       if (String(posts[p].post_id) === String(postId)) {
@@ -1613,7 +1680,7 @@ function syncSinglePostInsights(postId) {
 function syncPostComments(postId) {
   try {
     var chains = readSheetAsJson('Post_Chains');
-    var posts = readSheetAsJson('Posts');
+    var posts = getAllPostsAsJson();
     var accounts = readSheetAsJson('Accounts');
     var post = null;
     for (var p = 0; p < posts.length; p++) {
@@ -1820,7 +1887,7 @@ function updateCommentStatus(commentId, newStatus) {
  */
 function syncAllCommentsNow() {
   try {
-    var posts = readSheetAsJson('Posts');
+    var posts = getAllPostsAsJson();
     var count = 0;
     for (var i = 0; i < posts.length; i++) {
       if (posts[i].status === 'Published' || posts[i].status === 'Waiting Views') {
@@ -1935,36 +2002,31 @@ function getOfficialMetaPermalink(publishedPostId, token, username) {
  */
 function executeSinglePostPublish(postId, isWaitingViewsCheck) {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var postsSheet = ss.getSheetByName('Posts');
   var chainsSheet = ss.getSheetByName('Post_Chains');
   var mediaSheet = ss.getSheetByName('Media_Files');
   var accounts = readSheetAsJson('Accounts');
 
-  var postRows = postsSheet.getDataRange().getValues();
+  var postLoc = findPostRowLocation(ss, postId);
+  if (!postLoc) return { ok: false, message: 'Postingan tidak ditemukan' };
+
+  var currentSheet = postLoc.sheet;
+  var pIdx = postLoc.rowIndex;
+  var postRow = postLoc.rowValues;
+
+  var post = {
+    post_id: postRow[0],
+    account_id: postRow[1],
+    product_id: postRow[2],
+    publishing_mode: postRow[3],
+    interval_minutes: postRow[4],
+    target_views: Number(postRow[5] || 0),
+    status: postRow[6],
+    scheduled_at: postRow[7],
+    view_check_until: postRow[8]
+  };
+
   var chainRows = chainsSheet.getDataRange().getValues();
   var mediaRows = mediaSheet.getDataRange().getValues();
-
-  var pIdx = -1;
-  var post = null;
-  for (var i = 1; i < postRows.length; i++) {
-    if (String(postRows[i][0]) === String(postId)) {
-      pIdx = i + 1;
-      post = {
-        post_id: postRows[i][0],
-        account_id: postRows[i][1],
-        product_id: postRows[i][2],
-        publishing_mode: postRows[i][3],
-        interval_minutes: postRows[i][4],
-        target_views: Number(postRows[i][5] || 0),
-        status: postRows[i][6],
-        scheduled_at: postRows[i][7],
-        view_check_until: postRows[i][8]
-      };
-      break;
-    }
-  }
-
-  if (!post) return { ok: false, message: 'Postingan tidak ditemukan' };
 
   var account = null;
   for (var a = 0; a < accounts.length; a++) {
@@ -1974,7 +2036,7 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
     }
   }
   if (!account || !account.access_token) {
-    postsSheet.getRange(pIdx, 11).setValue('Akun atau Access Token tidak valid');
+    currentSheet.getRange(pIdx, 11).setValue('Akun atau Access Token tidak valid');
     return { ok: false, message: 'Akun atau Access Token tidak valid' };
   }
 
@@ -2016,15 +2078,14 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
 
       // Jika mode target views dan Utas #1 sudah selesai, tunda Utas sambungan
       if (k > 0 && post.publishing_mode === 'target_views' && !isWaitingViewsCheck) {
-        // Terapkan hasil Utas #1 yang sudah terbit ke sheet
         for (var u1 = 0; u1 < executedChainUpdates.length; u1++) {
           var upd1 = executedChainUpdates[u1];
           chainsSheet.getRange(upd1.rowIndex, 7).setValue(upd1.publishedPostId);
           chainsSheet.getRange(upd1.rowIndex, 8).setValue(upd1.permalink);
           chainsSheet.getRange(upd1.rowIndex, 9).setValue(upd1.publishedAt);
         }
-        postsSheet.getRange(pIdx, 7).setValue('Waiting Views');
-        postsSheet.getRange(pIdx, 11).setValue('');
+        currentSheet.getRange(pIdx, 7).setValue('Waiting Views');
+        currentSheet.getRange(pIdx, 11).setValue('');
         return { ok: true, status: 'Waiting Views', message: 'Utas #1 berhasil terbit! Utas #2 menunggu target views tercapai.' };
       }
 
@@ -2141,20 +2202,29 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
     }
 
     var finalStatus = allDone ? 'Published' : (post.publishing_mode === 'target_views' ? 'Waiting Views' : 'Scheduled');
-    postsSheet.getRange(pIdx, 7).setValue(finalStatus);
-    postsSheet.getRange(pIdx, 11).setValue(''); // Bersihkan error log
+    currentSheet.getRange(pIdx, 7).setValue(finalStatus);
+    currentSheet.getRange(pIdx, 11).setValue('');
+
+    // Migrasi otomatis ke Published_Posts jika telah selesai terbit
+    if (finalStatus === 'Published') {
+      var finishedRow = currentSheet.getRange(pIdx, 1, 1, currentSheet.getLastColumn()).getValues()[0];
+      var pubSheet = ss.getSheetByName('Published_Posts');
+      if (!pubSheet) pubSheet = ss.insertSheet('Published_Posts');
+      pubSheet.appendRow(finishedRow);
+      currentSheet.deleteRow(pIdx);
+    }
+
     return { ok: true, status: finalStatus, message: allDone ? 'Seluruh rantai utas berhasil terbit berurutan ke Threads!' : 'Utas berhasil diproses.' };
 
   } catch (err) {
-    // Jika Utas #1 gagal, proses langsung BERHENTI dan Utas #2 TIDAK PERNAH dikirim
     for (var ew = 0; ew < executedChainUpdates.length; ew++) {
       var exItem = executedChainUpdates[ew];
       chainsSheet.getRange(exItem.rowIndex, 7).setValue(exItem.publishedPostId);
       chainsSheet.getRange(exItem.rowIndex, 8).setValue(exItem.permalink);
       chainsSheet.getRange(exItem.rowIndex, 9).setValue(exItem.publishedAt);
     }
-    postsSheet.getRange(pIdx, 7).setValue('Failed');
-    postsSheet.getRange(pIdx, 11).setValue(err.message);
+    currentSheet.getRange(pIdx, 7).setValue('Failed');
+    currentSheet.getRange(pIdx, 11).setValue(err.message);
     return { ok: false, message: 'Gagal mempublikasikan utas: ' + err.message };
   }
 }
@@ -2168,15 +2238,18 @@ function processPublishingQueue() {
 
   try {
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    var postsSheet = ss.getSheetByName('Posts');
-    var postRows = postsSheet.getDataRange().getValues();
+    var queueSheet = ss.getSheetByName('Queue_Posts') || ss.getSheetByName('Posts');
+    if (!queueSheet) return;
+    var postRows = queueSheet.getDataRange().getValues();
+    if (postRows.length <= 1) return;
+
     var now = new Date();
     var processedCount = 0;
 
     for (var pIdx = 1; pIdx < postRows.length; pIdx++) {
       if (processedCount >= 5) break;
 
-      var pId = postRows[pIdx][0];
+      var pId = String(postRows[pIdx][0] || '').trim();
       var status = postRows[pIdx][6];
       var schedAtStr = postRows[pIdx][7];
       var checkUntilStr = postRows[pIdx][8];
@@ -2501,6 +2574,7 @@ function syncPostAnalytics() {
     var chainRows = chainsSheet.getDataRange().getValues();
     if (chainRows.length <= 1) return;
 
+    var allPosts = getAllPostsAsJson();
     var chainHeaders = chainRows[0];
     var cIdCol = chainHeaders.indexOf('chain_id');
     var pIdCol = chainHeaders.indexOf('post_id');
@@ -2517,9 +2591,9 @@ function syncPostAnalytics() {
       if (!threadsPostId) continue;
 
       var postObj = null;
-      for (var p = 0; p < posts.length; p++) {
-        if (String(posts[p].post_id) === String(postId)) {
-          postObj = posts[p];
+      for (var p = 0; p < allPosts.length; p++) {
+        if (String(allPosts[p].post_id) === String(postId)) {
+          postObj = allPosts[p];
           break;
         }
       }

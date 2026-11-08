@@ -523,32 +523,41 @@
             <!-- Toolbar Aksi & Filter Status Terpadu -->
             <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-200 pb-3">
               <!-- Filter Status Tabs & Sorting -->
-              <div class="flex flex-wrap items-center gap-2">
-                <button @click="postStatusFilter = 'all'" :class="postStatusFilter === 'all' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
+              <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <!-- 2 Tab Pilar: Antrean Aktif vs Riwayat Terbit -->
+                <button @click="postStatusFilter = 'queue'" :class="postStatusFilter === 'queue' ? 'bg-amber-600 text-white font-bold shadow-xs' : 'bg-surface text-slate-700 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200 flex items-center space-x-1.5">
+                  <i data-lucide="clock" class="w-3.5 h-3.5" :class="postStatusFilter === 'queue' ? 'text-white' : 'text-amber-500'"></i>
+                  <span>Antrean Aktif</span> (<span x-text="activeQueueCount"></span>)
+                </button>
+                <button @click="postStatusFilter = 'published_history'" :class="postStatusFilter === 'published_history' ? 'bg-emerald-600 text-white font-bold shadow-xs' : 'bg-surface text-slate-700 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200 flex items-center space-x-1.5">
+                  <i data-lucide="check-circle-2" class="w-3.5 h-3.5" :class="postStatusFilter === 'published_history' ? 'text-white' : 'text-emerald-500'"></i>
+                  <span>Riwayat Terbit</span> (<span x-text="publishedHistoryCount"></span>)
+                </button>
+
+                <div class="h-4 w-px bg-slate-200 mx-0.5 hidden sm:block"></div>
+
+                <button @click="postStatusFilter = 'all'" :class="postStatusFilter === 'all' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-2.5 py-1.5 rounded-xl text-xs transition border border-slate-200">
                   <span>Semua</span> (<span x-text="manualPosts.length"></span>)
                 </button>
-                <button @click="postStatusFilter = 'Draft'" :class="postStatusFilter === 'Draft' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
-                  <span>Draft</span> (<span x-text="manualPosts.filter(p => p.status === 'Draft').length"></span>)
-                </button>
-                <button @click="postStatusFilter = 'Scheduled'" :class="postStatusFilter === 'Scheduled' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
-                  <span>Terjadwal</span> (<span x-text="manualPosts.filter(p => p.status === 'Scheduled').length"></span>)
-                </button>
-                <button @click="postStatusFilter = 'Waiting Views'" :class="postStatusFilter === 'Waiting Views' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
+                <button @click="postStatusFilter = 'Waiting Views'" :class="postStatusFilter === 'Waiting Views' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-2.5 py-1.5 rounded-xl text-xs transition border border-slate-200">
                   <span>Waiting Views</span> (<span x-text="manualPosts.filter(p => p.status === 'Waiting Views').length"></span>)
                 </button>
-                <button @click="postStatusFilter = 'Published'" :class="postStatusFilter === 'Published' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
-                  <span>Terbit</span> (<span x-text="manualPosts.filter(p => p.status === 'Published').length"></span>)
+                <button @click="postStatusFilter = 'Scheduled'" :class="postStatusFilter === 'Scheduled' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-2.5 py-1.5 rounded-xl text-xs transition border border-slate-200">
+                  <span>Terjadwal</span> (<span x-text="manualPosts.filter(p => p.status === 'Scheduled').length"></span>)
                 </button>
-                <button @click="postStatusFilter = 'Failed'" :class="postStatusFilter === 'Failed' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
+                <button @click="postStatusFilter = 'Draft'" :class="postStatusFilter === 'Draft' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-2.5 py-1.5 rounded-xl text-xs transition border border-slate-200">
+                  <span>Draft</span> (<span x-text="manualPosts.filter(p => p.status === 'Draft').length"></span>)
+                </button>
+                <button @click="postStatusFilter = 'Failed'" :class="postStatusFilter === 'Failed' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-2.5 py-1.5 rounded-xl text-xs transition border border-slate-200">
                   <span>Gagal</span> (<span x-text="manualPosts.filter(p => p.status === 'Failed').length"></span>)
                 </button>
 
-                <div class="h-4 w-px bg-slate-200 mx-1 hidden sm:block"></div>
+                <div class="h-4 w-px bg-slate-200 mx-0.5 hidden sm:block"></div>
 
                 <!-- Dropdown Sorting -->
                 <div class="flex items-center space-x-1.5">
                   <select x-model="postSortOrder" class="text-xs py-1.5 px-2.5 rounded-xl border border-slate-200 bg-surface font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/20">
-                    <option value="newest">Terbit Pertama / Terbaru</option>
+                    <option value="newest">Status Aktif / Terbaru</option>
                     <option value="views_desc">Views Terbanyak</option>
                     <option value="scheduled">Jadwal Peluncuran</option>
                   </select>
@@ -4063,7 +4072,7 @@
         productListSearch: '',
         productListCategoryFilter: '',
         productListAccountFilter: '',
-        postStatusFilter: 'all',
+        postStatusFilter: 'queue',
         postSortOrder: 'newest',
         targetViewsIsCustom: false,
         mediaPickerTypeFilter: 'ALL',
@@ -4710,13 +4719,34 @@
           });
         },
 
+        get activeQueueCount() {
+          return this.manualPosts.filter(function(p) {
+            return p.status === 'Scheduled' || p.status === 'Waiting Views' || p.status === 'Draft' || p.status === 'Processing';
+          }).length;
+        },
+
+        get publishedHistoryCount() {
+          return this.manualPosts.filter(function(p) {
+            return p.status === 'Published' || p.status === 'Failed';
+          }).length;
+        },
+
         get filteredPostsByTab() {
           var status = this.postStatusFilter;
           var q = this.globalSearch.toLowerCase();
           var sortOrder = this.postSortOrder || 'newest';
           var self = this;
           var filtered = this.manualPosts.filter(function(p) {
-            var matchStatus = (status === 'all') || (p.status === status);
+            var matchStatus = false;
+            if (status === 'all') {
+              matchStatus = true;
+            } else if (status === 'queue') {
+              matchStatus = (p.status === 'Scheduled' || p.status === 'Waiting Views' || p.status === 'Draft' || p.status === 'Processing');
+            } else if (status === 'published_history') {
+              matchStatus = (p.status === 'Published' || p.status === 'Failed');
+            } else {
+              matchStatus = (p.status === status);
+            }
             if (!matchStatus) return false;
             if (!q) return true;
             var acc = self.getAccount(p.account_id);
@@ -4737,12 +4767,17 @@
             });
           } else {
             filtered.sort(function(a, b) {
-              // Posisi teratas: Postingan aktif di Meta Threads (Published atau Waiting Views)
-              var isLiveA = (a.status === 'Published' || a.status === 'Waiting Views') ? 1 : 0;
-              var isLiveB = (b.status === 'Published' || b.status === 'Waiting Views') ? 1 : 0;
-              if (isLiveA !== isLiveB) {
-                return isLiveB - isLiveA;
-              }
+              var getPriority = function(item) {
+                if (item.status === 'Waiting Views') return 5;
+                if (item.status === 'Processing') return 4;
+                if (item.status === 'Scheduled') return 3;
+                if (item.status === 'Published') return 2;
+                if (item.status === 'Draft') return 1;
+                return 0;
+              };
+              var pA = getPriority(a);
+              var pB = getPriority(b);
+              if (pA !== pB) return pB - pA;
               return new Date(b.scheduled_at || b.created_at || 0) - new Date(a.scheduled_at || a.created_at || 0);
             });
           }
