@@ -1805,7 +1805,7 @@ function saveAndPublishNow(postPayload, chains) {
 
 function syncAllInsightsNow() {
   syncPostAnalytics();
-  return { ok: true, message: 'Metrik insights berhasil disinkronkan langsung dari Threads API!' };
+  return { ok: true, message: 'Metrik insights & komentar terbaru pada pos aktif 48 jam berhasil disinkronkan!' };
 }
 
 function syncSinglePostInsights(postId) {
@@ -2263,43 +2263,37 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
         sequence_order: Number(chainRows[cIdx][2]),
         content_text: chainRows[cIdx][3],
         media_ids: chainRows[cIdx][4],
-        threads_post_id: chainRows[cIdx][6],
-        permalink: chainRows[cIdx][7]
+        threads_post_id: chainRows[cIdx][6] ? String(chainRows[cIdx][6]).trim() : '',
+        permalink: chainRows[cIdx][7] ? String(chainRows[cIdx][7]).trim() : ''
       });
     }
   }
   // Urutan rantai dipastikan berurutan dari Utas 1, Utas 2, dst.
   postChains.sort(function(a, b) { return a.sequence_order - b.sequence_order; });
 
-  var executedChainUpdates = [];
-  var lastThreadsPostId = '';
-
   try {
     for (var k = 0; k < postChains.length; k++) {
       var chain = postChains[k];
       var chainNumber = k + 1;
 
-      // Jika utas sudah terbit sebelumnya, simpan ID-nya untuk balasan utas berikutnya
+      // Jika utas ini sudah terbit sebelumnya, lewati
       if (chain.threads_post_id) {
-        lastThreadsPostId = chain.threads_post_id;
         continue;
       }
 
-      // VALIDASI MUTLAK: Utas #2 DILARANG terbit jika Utas #1 belum sukses!
-      if (k > 0 && !lastThreadsPostId) {
-        throw new Error('Utas #' + chainNumber + ' dibatalkan karena Utas induk (#1) belum terbit di Threads.');
+      // ATURAN BERJENJANG: Utas #1 root (tanpa reply_to_id). Utas #2+ wajib menunjuk ke utas tepat di atasnya (k - 1)
+      var parentThreadId = '';
+      if (k > 0) {
+        var prevChain = postChains[k - 1];
+        parentThreadId = prevChain && prevChain.threads_post_id ? String(prevChain.threads_post_id).trim() : '';
+        if (!parentThreadId) {
+          throw new Error('Utas #' + chainNumber + ' dibatalkan karena Utas tepat di atasnya (Utas #' + k + ') belum terbit atau belum memiliki Threads Post ID.');
+        }
       }
 
       // Jika mode target views dan Utas #1 sudah selesai, tunda Utas sambungan
       if (k > 0 && post.publishing_mode === 'target_views' && !isWaitingViewsCheck) {
-        for (var u1 = 0; u1 < executedChainUpdates.length; u1++) {
-          var upd1 = executedChainUpdates[u1];
-          chainsSheet.getRange(upd1.rowIndex, 7).setValue(upd1.publishedPostId);
-          chainsSheet.getRange(upd1.rowIndex, 8).setValue(upd1.permalink);
-          chainsSheet.getRange(upd1.rowIndex, 9).setValue(upd1.publishedAt);
-        }
-
-        // Status langsung diset menjadi Published agar masuk ke riwayat/filter terbit
+        // Status diset menjadi Published agar masuk ke riwayat/filter terbit
         currentSheet.getRange(pIdx, 7).setValue('Published');
         currentSheet.getRange(pIdx, 11).setValue('');
 
@@ -2352,7 +2346,6 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
             if (mObj.media_type === 'VIDEO') cPayload.video_url = mObj.cloudinary_url;
             else cPayload.image_url = mObj.cloudinary_url;
 
-            // Titik A: Buat kontainer anak dan tunggu FINISHED
             var childContainerId = createMetaContainer(account.meta_user_id, account.access_token, cPayload);
             checkMetaContainerStatus(childContainerId, account.access_token, 15);
             childContainerIds.push(childContainerId);
@@ -2363,7 +2356,6 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
           throw new Error('Karusel Utas #' + chainNumber + ' membutuhkan minimal 2 media yang valid.');
         }
 
-        // Titik B: Buat kontainer karusel induk
         var pCarouselPayload = {
           media_type: 'CAROUSEL',
           children: childContainerIds.join(',')
@@ -2371,8 +2363,8 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
         if (chain.content_text && String(chain.content_text).trim().length > 0) {
           pCarouselPayload.text = String(chain.content_text).trim();
         }
-        if (lastThreadsPostId) {
-          pCarouselPayload.reply_to_id = lastThreadsPostId;
+        if (parentThreadId) {
+          pCarouselPayload.reply_to_id = parentThreadId;
         }
 
         var parentCarouselId = createMetaContainer(account.meta_user_id, account.access_token, pCarouselPayload);
@@ -2389,8 +2381,8 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
         if (chain.content_text && String(chain.content_text).trim().length > 0) {
           sPayload.text = String(chain.content_text).trim();
         }
-        if (lastThreadsPostId) {
-          sPayload.reply_to_id = lastThreadsPostId;
+        if (parentThreadId) {
+          sPayload.reply_to_id = parentThreadId;
         }
 
         var singleContainerId = createMetaContainer(account.meta_user_id, account.access_token, sPayload);
@@ -2401,8 +2393,8 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
           media_type: 'TEXT',
           text: String(chain.content_text || '').trim()
         };
-        if (lastThreadsPostId) {
-          tPayload.reply_to_id = lastThreadsPostId;
+        if (parentThreadId) {
+          tPayload.reply_to_id = parentThreadId;
         }
 
         var textContainerId = createMetaContainer(account.meta_user_id, account.access_token, tPayload);
@@ -2414,31 +2406,23 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
       }
 
       var permalink = getOfficialMetaPermalink(publishedPostId, account.access_token, account.username);
+      var publishedAtIso = new Date().toISOString();
 
-      // Simpan hasil ke memori antrean; jangan tulis ke spreadsheet sebelum loop selesai
-      executedChainUpdates.push({
-        rowIndex: chain.rowIndex,
-        publishedPostId: publishedPostId,
-        permalink: permalink,
-        publishedAt: new Date().toISOString()
-      });
+      // Langsung simpan permanen ke baris Post_Chains di spreadsheet
+      chainsSheet.getRange(chain.rowIndex, 7).setValue(publishedPostId);
+      chainsSheet.getRange(chain.rowIndex, 8).setValue(permalink);
+      chainsSheet.getRange(chain.rowIndex, 9).setValue(publishedAtIso);
+      SpreadsheetApp.flush();
 
-      lastThreadsPostId = publishedPostId;
+      // Perbarui objek memori untuk rujukan utas berikutnya (k + 1)
       chain.threads_post_id = publishedPostId;
       chain.permalink = permalink;
+      chain.published_at = publishedAtIso;
 
-      // Jeda waktu propagasi 2.5 detik sebelum memproses balasan Utas #2
+      // Jeda waktu propagasi 3.5 detik agar kluster Meta mengindeks post sebelum balasan berikutnya
       if (k < postChains.length - 1) {
-        Utilities.sleep(2500);
+        Utilities.sleep(3500);
       }
-    }
-
-    // Tulis data ke Google Sheets HANYA SETELAH seluruh proses Meta berhasil
-    for (var w = 0; w < executedChainUpdates.length; w++) {
-      var itemUpdate = executedChainUpdates[w];
-      chainsSheet.getRange(itemUpdate.rowIndex, 7).setValue(itemUpdate.publishedPostId);
-      chainsSheet.getRange(itemUpdate.rowIndex, 8).setValue(itemUpdate.permalink);
-      chainsSheet.getRange(itemUpdate.rowIndex, 9).setValue(itemUpdate.publishedAt);
     }
 
     var allDone = true;
@@ -2462,14 +2446,9 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
     return { ok: true, status: finalStatus, message: allDone ? 'Seluruh rantai utas berhasil terbit berurutan ke Threads!' : 'Utas berhasil diproses.' };
 
   } catch (err) {
-    for (var ew = 0; ew < executedChainUpdates.length; ew++) {
-      var exItem = executedChainUpdates[ew];
-      chainsSheet.getRange(exItem.rowIndex, 7).setValue(exItem.publishedPostId);
-      chainsSheet.getRange(exItem.rowIndex, 8).setValue(exItem.permalink);
-      chainsSheet.getRange(exItem.rowIndex, 9).setValue(exItem.publishedAt);
-    }
     currentSheet.getRange(pIdx, 7).setValue('Failed');
     currentSheet.getRange(pIdx, 11).setValue(err.message);
+    SpreadsheetApp.flush();
     return { ok: false, message: 'Gagal mempublikasikan utas: ' + err.message };
   }
 }
@@ -2845,12 +2824,14 @@ function getCloudinaryUsageStats() {
 }
 
 /**
- * Post Insights Synchronizer (Real-Time Meta Graph API)
+ * Post Insights & Comments Synchronizer (Smart Window 48 Jam)
+ * Menyatukan penarikan metrik (views, likes, reposts) dan komentar baru
+ * Khusus untuk postingan yang aktif/diterbitkan dalam 48 jam terakhir.
  */
 function syncPostAnalytics() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) {
-    Logger.log('Sinkronisasi analitik dibatalkan: Sedang dikunci proses lain.');
+    Logger.log('Sinkronisasi analitik & komentar dibatalkan: Sedang dikunci proses lain.');
     return;
   }
 
@@ -2859,7 +2840,6 @@ function syncPostAnalytics() {
     var chainsSheet = ss.getSheetByName('Post_Chains');
     var analyticsSheet = ss.getSheetByName('Post_Analytics');
     var accounts = readSheetAsJson('Accounts');
-    var posts = readSheetAsJson('Posts');
 
     var chainRows = chainsSheet.getDataRange().getValues();
     if (chainRows.length <= 1) return;
@@ -2873,7 +2853,9 @@ function syncPostAnalytics() {
 
     var anaRows = analyticsSheet.getDataRange().getValues();
     var nowTime = new Date().getTime();
-    var windowMs = 48 * 60 * 60 * 1000; // Batas aktif 48 jam
+    var windowMs = 48 * 60 * 60 * 1000; // Batas aktif cerdas 48 jam
+
+    var syncedCommentPostIds = {};
 
     for (var i = 1; i < chainRows.length; i++) {
       var chainId = chainRows[i][cIdCol >= 0 ? cIdCol : 0];
@@ -2892,7 +2874,7 @@ function syncPostAnalytics() {
       }
       if (!postObj || !postObj.account_id) continue;
 
-      // Optimasi kuota & timeout GAS: batasi sinkronisasi rutin hanya untuk postingan 48 jam terakhir
+      // Smart Window 48 Jam: Batasi sinkronisasi rutin hanya untuk postingan 48 jam terakhir atau Waiting Views
       if (postObj.status !== 'Waiting Views') {
         var pubDateVal = (pubAtCol >= 0 ? chainRows[i][pubAtCol] : '') || postObj.scheduled_at || postObj.created_at;
         if (pubDateVal) {
@@ -2915,18 +2897,14 @@ function syncPostAnalytics() {
         continue;
       }
 
+      // 1. Sinkronisasi Metrik Insights (Views, Likes, Replies, Reposts)
       try {
         var insightUrl = 'https://graph.threads.net/v1.0/' + encodeURIComponent(threadsPostId) + '/insights?metric=views,likes,replies,reposts&access_token=' + encodeURIComponent(token);
         var resp = UrlFetchApp.fetch(insightUrl, { muteHttpExceptions: true });
         var data = JSON.parse(resp.getContentText());
 
-        if (data.error) {
-          Logger.log('Meta API Insights Error [Chain ' + chainId + ', Post ' + threadsPostId + ']: ' + (data.error.message || JSON.stringify(data.error)));
-          continue;
-        }
-
-        var views = 0, likes = 0, replies = 0, reposts = 0;
-        if (data.data && Array.isArray(data.data)) {
+        if (!data.error && data.data && Array.isArray(data.data)) {
+          var views = 0, likes = 0, replies = 0, reposts = 0;
           for (var m = 0; m < data.data.length; m++) {
             var item = data.data[m];
             var rawVal = item.value !== undefined ? item.value : (item.total_value ? item.total_value.value : (item.values && item.values.length > 0 ? item.values[0].value : 0));
@@ -2936,28 +2914,36 @@ function syncPostAnalytics() {
             if (item.name === 'replies') replies = val;
             if (item.name === 'reposts') reposts = val;
           }
-        }
 
-        var anaRowIdx = -1;
-        for (var r = 1; r < anaRows.length; r++) {
-          if (String(anaRows[r][1]) === String(chainId)) {
-            anaRowIdx = r + 1;
-            break;
+          var anaRowIdx = -1;
+          for (var r = 1; r < anaRows.length; r++) {
+            if (String(anaRows[r][1]) === String(chainId)) {
+              anaRowIdx = r + 1;
+              break;
+            }
+          }
+
+          var nowIso = new Date().toISOString();
+          if (anaRowIdx > 0) {
+            analyticsSheet.getRange(anaRowIdx, 3, 1, 5).setValues([[views, likes, reposts, replies, nowIso]]);
+          } else {
+            var anaId = 'ana_' + Utilities.getUuid().slice(0, 8);
+            analyticsSheet.appendRow([anaId, chainId, views, likes, reposts, replies, nowIso]);
+            anaRows.push([anaId, chainId, views, likes, reposts, replies, nowIso]);
           }
         }
-
-        var nowIso = new Date().toISOString();
-        if (anaRowIdx > 0) {
-          analyticsSheet.getRange(anaRowIdx, 3, 1, 5).setValues([[views, likes, reposts, replies, nowIso]]);
-        } else {
-          var anaId = 'ana_' + Utilities.getUuid().slice(0, 8);
-          analyticsSheet.appendRow([anaId, chainId, views, likes, reposts, replies, nowIso]);
-          anaRows.push([anaId, chainId, views, likes, reposts, replies, nowIso]);
-        }
-
-        Logger.log('Meta Insights Synced [Chain ' + chainId + ', Post ' + threadsPostId + ']: views=' + views + ', likes=' + likes + ', reposts=' + reposts + ', replies=' + replies);
       } catch (err) {
-        Logger.log('Gagal sinkronisasi analitik [Chain ' + chainId + ', Post ' + threadsPostId + ']: ' + err.message);
+        Logger.log('Gagal sinkronisasi analitik [Chain ' + chainId + ']: ' + err.message);
+      }
+
+      // 2. Sinkronisasi Komentar Baru secara Serentak (1x per Postingan Aktif 48 Jam)
+      if (!syncedCommentPostIds[postId]) {
+        syncedCommentPostIds[postId] = true;
+        try {
+          syncPostComments(postId);
+        } catch (cErr) {
+          Logger.log('Gagal auto-sync komentar [Post ' + postId + ']: ' + cErr.message);
+        }
       }
     }
   } catch (outerErr) {

@@ -322,8 +322,11 @@
       <header class="h-16 bg-surface border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between shrink-0 gap-4">
         <div class="flex items-center space-x-3 min-w-0">
           <!-- Mobile Hamburger Toggle Button -->
-          <button @click="mobileMenuOpen = true" class="p-2 md:hidden text-slate-600 hover:bg-slate-100 rounded-xl focus:outline-none">
+          <button @click="mobileMenuOpen = true" class="relative p-2 md:hidden text-slate-600 hover:bg-slate-100 rounded-xl focus:outline-none">
             <i data-lucide="menu" class="w-5 h-5"></i>
+            <template x-if="pendingCommentsCount > 0">
+              <span class="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white"></span>
+            </template>
           </button>
           
           <!-- Judul Menu Utama Sejajar di Kiri -->
@@ -343,6 +346,15 @@
             <span class="w-2 h-2 rounded-full" :class="settings.triggers_installed === 'TRUE' ? 'bg-emerald-500' : 'bg-rose-400'"></span>
             <span x-text="settings.triggers_installed === 'TRUE' ? 'Triggers Aktif' : 'Triggers Berhenti'"></span>
           </div>
+
+          <!-- Tombol Notifikasi Leads Komentar Masuk -->
+          <button @click="openInboxWithPendingFilter()" class="relative p-2 text-slate-600 hover:text-brand-600 hover:bg-slate-100 rounded-xl transition" title="Inbox Komentar & Leads">
+            <i data-lucide="bell" class="w-5 h-5"></i>
+            <template x-if="pendingCommentsCount > 0">
+              <span class="absolute top-1 right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white ring-2 ring-white animate-pulse" x-text="pendingCommentsCount"></span>
+            </template>
+          </button>
+
           <div class="hidden sm:block w-px h-6 bg-slate-200"></div>
           <div class="flex items-center space-x-2 sm:space-x-3">
             <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-brand-100 text-brand-700 font-bold flex items-center justify-center text-xs sm:text-sm border border-brand-200">OP</div>
@@ -371,6 +383,28 @@
           
           <!-- TAB 1: DASHBOARD (RINGKASAN KPI & AKTIVITAS TERAKHIR) -->
           <div x-show="currentTab === 'dashboard'" class="space-y-6">
+            <!-- Banner Interaktif Notifikasi Leads Masuk -->
+            <template x-if="pendingCommentsCount > 0">
+              <div @click="openInboxWithPendingFilter()" class="p-4 bg-gradient-to-r from-amber-50 to-rose-50 border border-amber-200/80 rounded-2xl flex items-center justify-between cursor-pointer hover:shadow-md transition group">
+                <div class="flex items-center space-x-3 min-w-0">
+                  <div class="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center shrink-0 shadow-sm shadow-rose-500/20">
+                    <i data-lucide="message-circle" class="w-5 h-5"></i>
+                  </div>
+                  <div class="min-w-0">
+                    <h4 class="text-xs sm:text-sm font-bold text-slate-900 flex items-center space-x-2">
+                      <span x-text="pendingCommentsCount + ' Leads / Pertanyaan Masuk Belum Dibalas!'"></span>
+                      <span class="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-rose-500 text-white animate-pulse">BARU</span>
+                    </h4>
+                    <p class="text-[11px] text-slate-500 truncate">Calon pembeli berinteraksi pada postingan aktif 48 jam terakhir. Klik untuk membalas langsung.</p>
+                  </div>
+                </div>
+                <div class="flex items-center space-x-1 text-xs font-bold text-rose-600 shrink-0 group-hover:translate-x-1 transition">
+                  <span class="hidden sm:inline">Buka Inbox</span>
+                  <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                </div>
+              </div>
+            </template>
+
             <!-- KPI Summary Cards (Bersih & Ramping) -->
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
               <div class="bg-surface p-5 rounded-2xl border border-slate-200 shadow-sm">
@@ -2802,9 +2836,12 @@
           <span class="text-[10px] mt-1">Bank Ide</span>
         </button>
 
-        <button @click="mobileMenuOpen = true" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-600 transition">
+        <button @click="mobileMenuOpen = true" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-600 transition relative">
           <i data-lucide="menu" class="w-5 h-5"></i>
           <span class="text-[10px] mt-1">Menu</span>
+          <template x-if="pendingCommentsCount > 0">
+            <span class="absolute top-1 right-5 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white"></span>
+          </template>
         </button>
       </nav>
     </main>
@@ -5659,6 +5696,13 @@
             return new Date(b.created_at || 0) - new Date(a.created_at || 0);
           });
           return list;
+        },
+
+        openInboxWithPendingFilter: function() {
+          this.commentTabFilter = 'pending';
+          this.commentAccountFilter = '';
+          this.commentSearch = '';
+          this.switchTab('inbox_comments');
         },
 
         openReplyModal: function(comment) {
