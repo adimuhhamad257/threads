@@ -540,7 +540,7 @@
                   <span>Semua</span> (<span x-text="manualPosts.length"></span>)
                 </button>
                 <button @click="postStatusFilter = 'Waiting Views'" :class="postStatusFilter === 'Waiting Views' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-2.5 py-1.5 rounded-xl text-xs transition border border-slate-200">
-                  <span>Waiting Views</span> (<span x-text="manualPosts.filter(p => p.status === 'Waiting Views').length"></span>)
+                  <span>Waiting Views</span> (<span x-text="manualPosts.filter(p => isWaitingViewsPost(p)).length"></span>)
                 </button>
                 <button @click="postStatusFilter = 'Scheduled'" :class="postStatusFilter === 'Scheduled' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-2.5 py-1.5 rounded-xl text-xs transition border border-slate-200">
                   <span>Terjadwal</span> (<span x-text="manualPosts.filter(p => p.status === 'Scheduled').length"></span>)
@@ -581,7 +581,7 @@
             <div class="bg-surface rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <!-- Mobile Interactive Card List (Block on mobile, hidden on md+) -->
               <div class="block md:hidden divide-y divide-slate-100">
-                <template x-for="post in filteredPostsByTab" :key="'m-ctrl-'+post.post_id">
+                <template x-for="post in paginatedPostsList" :key="'m-ctrl-'+post.post_id">
                   <div class="p-4 space-y-3 hover:bg-slate-50/50 transition">
                     <!-- Header Kartu: Akun & Status -->
                     <div class="flex items-center justify-between gap-2">
@@ -595,12 +595,23 @@
                           <span class="text-[10px] text-slate-400 block truncate" x-text="formatDate(post.scheduled_at)"></span>
                         </div>
                       </div>
-                      <span :class="getStatusBadgeClass(post.status)" class="px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 flex items-center space-x-1">
-                        <template x-if="post.status === 'Waiting Views'">
-                          <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                      <div class="flex flex-col items-end gap-1">
+                        <span :class="getStatusBadgeClass(post.status)" class="px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 flex items-center space-x-1">
+                          <span x-text="post.status"></span>
+                        </span>
+                        <template x-if="isWaitingViewsPost(post)">
+                          <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center space-x-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                            <span>Utas #2 Ditahan</span>
+                          </span>
                         </template>
-                        <span x-text="post.status === 'Waiting Views' ? 'Utas #1 Live (Waiting Views)' : post.status"></span>
-                      </span>
+                        <template x-if="post.status === 'Published' && !hasUnreleasedChains(post.post_id) && getPostChains(post.post_id).length > 1">
+                          <span class="text-[9px] text-emerald-600 font-semibold flex items-center space-x-0.5">
+                            <i data-lucide="check-check" class="w-3 h-3"></i>
+                            <span>Semua Utas Terbit</span>
+                          </span>
+                        </template>
+                      </div>
                     </div>
 
                     <!-- Hook Teks & Preview Multi-Media Carousel -->
@@ -645,7 +656,7 @@
                     </div>
 
                     <!-- Target Views Progress Bar (Mobile) -->
-                    <template x-if="post.publishing_mode === 'target_views' || post.status === 'Waiting Views'">
+                    <template x-if="isWaitingViewsPost(post)">
                       <div class="p-2.5 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
                         <div class="flex justify-between text-[10px] text-slate-500 font-mono">
                           <span x-text="getPostMetric(post.post_id, 'views') + ' / ' + (post.target_views || 100) + ' Views'"></span>
@@ -677,15 +688,7 @@
                     </div>
 
                     <!-- Tombol Aksi Jempol Ramah Sentuh (Mobile Action Row) -->
-                    <div class="pt-2 border-t border-slate-100 space-y-2">
-                      <!-- Tombol Paksa Rilis Paling Menonjol Saat Waiting Views -->
-                      <template x-if="post.status === 'Waiting Views'">
-                        <button @click="forceReleasePost(post.post_id)" class="w-full min-h-[44px] py-2.5 px-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs rounded-xl shadow-sm flex items-center justify-center space-x-2 transition">
-                          <i data-lucide="zap" class="w-4 h-4"></i>
-                          <span>⚡ Paksa Rilis Sisa Utas Sekarang</span>
-                        </button>
-                      </template>
-
+                    <div class="pt-2 border-t border-slate-100">
                       <div class="grid grid-cols-5 gap-2">
                         <button @click="syncSinglePost(post.post_id)" :disabled="syncingPostIds.indexOf(post.post_id) !== -1" class="min-h-[40px] flex items-center justify-center bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold rounded-xl" title="Sinkronkan Metrik">
                           <i data-lucide="refresh-cw" class="w-4 h-4" :class="syncingPostIds.indexOf(post.post_id) !== -1 ? 'animate-spin' : ''"></i>
@@ -701,9 +704,15 @@
                           </button>
                         </template>
 
-                        <template x-if="post.status !== 'Published'">
-                          <button @click="editPost(post)" class="min-h-[40px] flex items-center justify-center bg-indigo-50 text-brand-700 hover:bg-indigo-100 text-xs font-semibold rounded-xl" title="Edit">
+                        <!-- Proteksi Edit: Dikunci jika Utas sudah terbit -->
+                        <template x-if="!isPostLocked(post)">
+                          <button @click="editPost(post)" class="min-h-[40px] flex items-center justify-center bg-indigo-50 text-brand-700 hover:bg-indigo-100 text-xs font-semibold rounded-xl" title="Edit Post">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
+                          </button>
+                        </template>
+                        <template x-if="isPostLocked(post)">
+                          <button disabled class="min-h-[40px] flex items-center justify-center bg-slate-100 text-slate-300 cursor-not-allowed text-xs font-semibold rounded-xl" title="Terkunci: Postingan sudah terbit">
+                            <i data-lucide="lock" class="w-4 h-4"></i>
                           </button>
                         </template>
 
@@ -734,7 +743,7 @@
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-100">
-                    <template x-for="post in filteredPostsByTab" :key="'ctrl-'+post.post_id">
+                    <template x-for="post in paginatedPostsList" :key="'ctrl-'+post.post_id">
                       <tr class="hover:bg-slate-50/50 transition">
                         <!-- Akun & Hook (Klik untuk Buka Detail) -->
                         <td class="py-3.5 px-4 cursor-pointer" @click="openPostDetail(post)">
@@ -794,15 +803,27 @@
 
                         <!-- Status Badge & Mini Progress Bar (Target Views / Waiting Views) -->
                         <td class="py-3.5 px-4 whitespace-nowrap">
-                          <div class="space-y-1.5 min-w-[130px]">
-                            <span :class="getStatusBadgeClass(post.status)" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center space-x-1" :title="post.status === 'Waiting Views' ? 'Utas #1 berhasil live di Threads, menunggu target views tercapai sebelum menerbitkan utas lanjutan' : ''">
-                              <template x-if="post.status === 'Waiting Views'">
-                                <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                          <div class="space-y-1.5 min-w-[140px]">
+                            <div class="flex items-center gap-1.5">
+                              <span :class="getStatusBadgeClass(post.status)" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center space-x-1">
+                                <span x-text="post.status"></span>
+                              </span>
+                              <template x-if="isWaitingViewsPost(post)">
+                                <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center space-x-1" title="Utas #1 Live di Threads, Utas #2 masih ditahan menunggu target views">
+                                  <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                  <span>Utas #2 Ditahan</span>
+                                </span>
                               </template>
-                              <span x-text="post.status === 'Waiting Views' ? 'Utas #1 Live (Waiting Views)' : post.status"></span>
-                            </span>
+                            </div>
+
+                            <template x-if="post.status === 'Published' && !hasUnreleasedChains(post.post_id) && getPostChains(post.post_id).length > 1">
+                              <div class="text-[10px] text-emerald-600 font-semibold flex items-center space-x-1">
+                                <i data-lucide="check-check" class="w-3 h-3"></i>
+                                <span>Semua Utas Terbit</span>
+                              </div>
+                            </template>
                             
-                            <template x-if="post.publishing_mode === 'target_views' || post.status === 'Waiting Views'">
+                            <template x-if="isWaitingViewsPost(post)">
                               <div class="pt-0.5">
                                 <div class="flex justify-between text-[10px] text-slate-500 font-mono mb-0.5">
                                   <span x-text="getPostMetric(post.post_id, 'views') + ' / ' + (post.target_views || 100) + ' Views'"></span>
@@ -832,13 +853,6 @@
                         <!-- Aksi Ringkas (Ikon Mata Dihapus, Baris Dapat Diklik) -->
                         <td class="py-3.5 px-4 text-right whitespace-nowrap">
                           <div class="flex items-center justify-end space-x-1.5">
-                            <!-- Tombol Khusus Paksa Rilis untuk Status Waiting Views -->
-                            <template x-if="post.status === 'Waiting Views'">
-                              <button @click="forceReleasePost(post.post_id)" class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] rounded-lg shadow-xs flex items-center space-x-1 transition" title="Paksa Rilis Sisa Utas / Spill Link Sekarang Tanpa Menunggu Target Views">
-                                <span>⚡ Paksa Rilis</span>
-                              </button>
-                            </template>
-
                             <!-- Tombol Inline Sync Metrik Per-Baris -->
                             <button @click.stop="syncSinglePost(post.post_id)" :disabled="syncingPostIds.indexOf(post.post_id) !== -1" class="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition" title="Sinkronkan Metrik Postingan Ini">
                               <i data-lucide="refresh-cw" class="w-4 h-4" :class="syncingPostIds.indexOf(post.post_id) !== -1 ? 'animate-spin' : ''"></i>
@@ -850,10 +864,17 @@
                                 <i data-lucide="send" class="w-4 h-4"></i>
                               </button>
                             </template>
-                            <template x-if="post.status !== 'Published'">
+
+                            <!-- Proteksi Edit: Tombol Edit terkunci jika pos sudah live / Published -->
+                            <template x-if="!isPostLocked(post)">
                               <button @click="editPost(post)" class="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg" title="Edit Draf / Jadwal">
                                 <i data-lucide="pencil" class="w-4 h-4"></i>
                               </button>
+                            </template>
+                            <template x-if="isPostLocked(post)">
+                              <span class="p-1.5 text-slate-300 cursor-not-allowed inline-flex items-center" title="Terkunci: Postingan sudah terbit tidak dapat diedit">
+                                <i data-lucide="lock" class="w-4 h-4"></i>
+                              </span>
                             </template>
 
                             <template x-if="getFirstChainPermalink(post.post_id)">
@@ -1785,6 +1806,13 @@
           <div x-show="currentTab === 'composer'" class="space-y-5">
             <!-- Action Bar Pojok Kanan Atas -->
             <div class="flex justify-end items-center space-x-2">
+              <!-- Tombol Batal Edit jika dalam Mode Edit -->
+              <template x-if="composer.post_id">
+                <button type="button" @click="cancelEdit()" class="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition shadow-2xs">
+                  <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                  <span>Batal Edit</span>
+                </button>
+              </template>
               <button type="button" @click="openComposerIdeaBankModal()" class="px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition shadow-2xs">
                 <i data-lucide="flame" class="w-3.5 h-3.5 text-amber-600"></i>
                 <span>Bank Ide / Referensi</span>
@@ -1992,10 +2020,17 @@
                 <!-- 4. Sticky Footer Action Bar -->
                 <div class="sticky bottom-16 md:bottom-2 z-30 bg-surface/95 backdrop-blur-md -mx-3.5 px-4 py-3 md:mx-0 md:px-5 md:py-3.5 border border-slate-200/80 rounded-2xl shadow-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                   <div class="flex items-center space-x-2">
+                    <!-- Indikator & Aksi Batal Edit -->
                     <template x-if="composer.post_id">
-                      <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
-                        Mode Edit Postingan
-                      </span>
+                      <div class="flex items-center space-x-2">
+                        <span class="px-2.5 py-1 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center space-x-1">
+                          <i data-lucide="edit-3" class="w-3 h-3 text-amber-600"></i>
+                          <span>Mode Edit Postingan</span>
+                        </span>
+                        <button type="button" @click="cancelEdit()" class="px-2 py-1 text-[11px] font-semibold text-rose-600 hover:underline">
+                          Batal Edit
+                        </button>
+                      </div>
                     </template>
                     <span class="text-xs text-slate-500" x-text="getActiveComposerAccountIds().length > 0 ? (getActiveComposerAccountIds().length + ' akun tujuan') : 'Pilih akun terlebih dahulu'"></span>
                   </div>
@@ -2591,14 +2626,21 @@
                   </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label class="block text-xs font-semibold text-slate-700 mb-1">Zona Waktu (Timezone)</label>
                     <input type="text" x-model="settings.timezone" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50">
                   </div>
                   <div>
-                    <label class="block text-xs font-semibold text-slate-700 mb-1">Fallback Jam Target Views (Jam)</label>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Batas Waktu Target Views (Jam)</label>
                     <input type="number" x-model="settings.default_fallback_views_hours" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50" placeholder="24">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Tindakan Saat Batas Waktu Habis</label>
+                    <select x-model="settings.target_views_timeout_action" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 font-medium">
+                      <option value="auto_release">Terbit Sisa Utas Otomatis</option>
+                      <option value="stop_check">Hentikan Pemantauan</option>
+                    </select>
                   </div>
                 </div>
               </div>
@@ -3648,18 +3690,24 @@
     </div>
 
     <!-- MODAL PRATINJAU DETAIL POSTINGAN LENGKAP (MERGE INSIGHTS & UTAS) -->
-    <div x-cloak x-show="postDetailModal.show" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
-      <div class="bg-surface rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-2xl border border-slate-100 max-h-[92vh] flex flex-col justify-between">
+    <div x-cloak x-show="postDetailModal.show" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+      <div class="bg-surface rounded-2xl p-6 max-w-4xl w-full mx-auto shadow-2xl border border-slate-100 max-h-[92vh] flex flex-col justify-between">
         <div>
-          <!-- Header Akun & Status -->
-          <div class="flex justify-between items-center pb-3 border-b border-slate-100">
-            <div class="flex items-center space-x-3">
-              <img :src="getAccount(postDetailModal.post ? postDetailModal.post.account_id : '').profile_picture_url || 'https://via.placeholder.com/40'" class="w-10 h-10 rounded-full border border-slate-200">
-              <div>
-                <div class="flex items-center space-x-1.5">
-                  <h3 class="text-sm font-bold text-slate-900" x-text="'@' + getAccount(postDetailModal.post ? postDetailModal.post.account_id : '').username"></h3>
-                  <i data-lucide="badge-check" class="w-4 h-4 text-brand-600"></i>
-                  <span :class="getStatusBadgeClass(postDetailModal.post ? postDetailModal.post.status : '')" class="ml-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold" x-text="postDetailModal.post ? postDetailModal.post.status : ''"></span>
+          <!-- Header Akun, Status & Bar Target Views Sejajar di Atas -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3.5 border-b border-slate-100 gap-3">
+            <div class="flex items-center space-x-3 min-w-0">
+              <img :src="getAccount(postDetailModal.post ? postDetailModal.post.account_id : '').profile_picture_url || 'https://via.placeholder.com/40'" class="w-11 h-11 rounded-full border border-slate-200 shrink-0 object-cover">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <h3 class="text-sm sm:text-base font-bold text-slate-900 truncate" x-text="'@' + getAccount(postDetailModal.post ? postDetailModal.post.account_id : '').username"></h3>
+                  <i data-lucide="badge-check" class="w-4 h-4 text-brand-600 shrink-0"></i>
+                  <span :class="getStatusBadgeClass(postDetailModal.post ? postDetailModal.post.status : '')" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold" x-text="postDetailModal.post ? postDetailModal.post.status : ''"></span>
+                  <template x-if="postDetailModal.post && isWaitingViewsPost(postDetailModal.post)">
+                    <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center space-x-1">
+                      <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                      <span>Utas #2 Ditahan</span>
+                    </span>
+                  </template>
                 </div>
                 <div class="flex items-center space-x-2 text-[11px] text-slate-400 mt-0.5">
                   <span x-text="postDetailModal.post ? formatDate(postDetailModal.post.scheduled_at) : ''"></span>
@@ -3668,155 +3716,175 @@
                 </div>
               </div>
             </div>
-            <button @click="postDetailModal.show = false" class="text-slate-400 hover:text-slate-600">
-              <i data-lucide="x" class="w-5 h-5"></i>
-            </button>
+
+            <!-- Target Views Header Widget Sejajar di Samping Kanan -->
+            <div class="flex items-center space-x-3 self-end sm:self-center shrink-0">
+              <template x-if="postDetailModal.post && (postDetailModal.post.publishing_mode === 'target_views' || isWaitingViewsPost(postDetailModal.post))">
+                <div class="w-48 sm:w-56 p-2 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                  <div class="flex justify-between items-center text-[10px]">
+                    <span class="font-bold text-slate-700 flex items-center space-x-1">
+                      <i data-lucide="target" class="w-3 h-3 text-brand-600"></i>
+                      <span>Target Views</span>
+                    </span>
+                    <span class="font-mono font-bold text-brand-600" x-text="getPostMetric(postDetailModal.post.post_id, 'views') + ' / ' + (postDetailModal.post.target_views || 100) + ' (' + getTargetViewPercentage(postDetailModal.post) + '%)'"></span>
+                  </div>
+                  <div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-brand-600 to-accent-500 transition-all rounded-full" :style="'width: ' + getTargetViewPercentage(postDetailModal.post) + '%'"></div>
+                  </div>
+                </div>
+              </template>
+              <button @click="postDetailModal.show = false" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition">
+                <i data-lucide="x" class="w-5 h-5"></i>
+              </button>
+            </div>
           </div>
 
-          <div class="mt-4 max-h-[62vh] overflow-y-auto space-y-3 pr-1">
+          <!-- Body Rantai Utas Lapang (Max-W-4XL) -->
+          <div class="mt-4 max-h-[66vh] overflow-y-auto space-y-3.5 pr-1 text-xs">
             <template x-if="postDetailModal.post">
               <div class="space-y-3">
-                <!-- Slim Mini Progress Bar Target Views Organik -->
-                <template x-if="postDetailModal.post.publishing_mode === 'target_views' || postDetailModal.post.status === 'Waiting Views'">
-                  <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                <template x-for="(chain, cIdx) in getPostChains(postDetailModal.post.post_id)" :key="'dtl-chn-'+chain.chain_id">
+                  <div class="p-4 bg-slate-50/75 hover:bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5 transition">
+                    <!-- Chain Title & Links -->
                     <div class="flex justify-between items-center text-xs">
-                      <span class="font-bold text-slate-700 flex items-center space-x-1 text-[11px]">
-                        <i data-lucide="target" class="w-3.5 h-3.5 text-brand-600"></i>
-                        <span>Target Views</span>
-                      </span>
-                      <span class="font-mono font-bold text-brand-600 text-xs" x-text="getPostMetric(postDetailModal.post.post_id, 'views') + ' / ' + (postDetailModal.post.target_views || 100) + ' (' + getTargetViewPercentage(postDetailModal.post) + '%)'"></span>
+                      <div class="flex items-center space-x-2">
+                        <span class="w-5 h-5 rounded-full bg-brand-100 text-brand-700 font-bold text-[10px] flex items-center justify-center" x-text="cIdx + 1"></span>
+                        <span class="font-bold text-slate-800" x-text="cIdx === 0 ? 'Utas #1 (Root Hook)' : 'Utas #' + (cIdx + 1) + ' (Sambungan)'"></span>
+                        <span :class="chain.threads_post_id ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'" class="px-2 py-0.5 rounded-full text-[9px] font-bold" x-text="chain.threads_post_id ? 'Terbit' : 'Belum Terbit'"></span>
+                      </div>
+                      <template x-if="chain.permalink">
+                        <a :href="chain.permalink" target="_blank" class="text-sky-600 hover:underline flex items-center space-x-1 font-semibold text-[11px]">
+                          <i data-lucide="external-link" class="w-3 h-3"></i>
+                          <span>Buka di Threads</span>
+                        </a>
+                      </template>
                     </div>
-                    <div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                      <div class="h-full bg-gradient-to-r from-brand-600 to-accent-500 transition-all rounded-full" :style="'width: ' + getTargetViewPercentage(postDetailModal.post) + '%'"></div>
-                    </div>
-                  </div>
-                </template>
 
-                <!-- Rantai Utas Detail List (Dengan Strip Metrik Ikon Ringkas di Utas #1) -->
-                <div class="space-y-3">
-                  <template x-for="(chain, cIdx) in getPostChains(postDetailModal.post.post_id)" :key="'dtl-chn-'+chain.chain_id">
-                    <div class="p-3.5 bg-slate-50/75 rounded-2xl border border-slate-200 space-y-2">
-                      <div class="flex justify-between items-center text-xs">
-                        <div class="flex items-center space-x-2">
-                          <span class="w-5 h-5 rounded-full bg-brand-100 text-brand-700 font-bold text-[10px] flex items-center justify-center" x-text="cIdx + 1"></span>
-                          <span class="font-bold text-slate-700" x-text="cIdx === 0 ? 'Utas #1 (Root Hook)' : 'Utas #' + (cIdx + 1) + ' (Sambungan)'"></span>
-                          <span :class="chain.threads_post_id ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'" class="px-2 py-0.5 rounded-full text-[9px] font-bold" x-text="chain.threads_post_id ? 'Terbit' : 'Belum Terbit'"></span>
-                        </div>
-                        <template x-if="chain.permalink">
-                          <a :href="chain.permalink" target="_blank" class="text-sky-600 hover:underline flex items-center space-x-1 font-semibold text-[11px]">
-                            <i data-lucide="external-link" class="w-3 h-3"></i>
-                            <span>Buka di Threads</span>
-                          </a>
+                    <!-- Konteks Produk Affiliate -->
+                    <template x-if="postDetailModal.post && postDetailModal.post.product_id && getProduct(postDetailModal.post.product_id).product_id">
+                      <div class="flex items-center space-x-1.5 pb-0.5">
+                        <span class="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                          <i data-lucide="tag" class="w-3 h-3 text-indigo-500"></i>
+                          <span class="font-bold" x-text="'Produk: ' + getProduct(postDetailModal.post.product_id).title"></span>
+                          <span class="text-emerald-600 font-bold" x-text="'(' + getProduct(postDetailModal.post.product_id).commission_pct + '%)'"></span>
+                        </span>
+                      </div>
+                    </template>
+
+                    <!-- Isi Teks Utas -->
+                    <p class="text-slate-800 whitespace-pre-wrap leading-relaxed text-xs" x-text="chain.content_text"></p>
+
+                    <!-- Pratinjau Media Asli Rantai Utas -->
+                    <template x-if="getChainMediaList(chain).length > 0">
+                      <div class="flex overflow-x-auto space-x-2 pt-1 pb-1">
+                        <template x-for="(mItem, mIdx) in getChainMediaList(chain)" :key="'dtl-med-'+chain.chain_id+'-'+mIdx">
+                          <div class="relative w-28 h-28 rounded-xl overflow-hidden border border-slate-200 bg-slate-900 shrink-0 shadow-xs">
+                            <template x-if="isVideoMedia(mItem)">
+                              <video :src="getMediaUrl(mItem)" controls muted playsinline class="w-full h-full object-cover"></video>
+                            </template>
+                            <template x-if="!isVideoMedia(mItem)">
+                              <img :src="getMediaUrl(mItem)" class="w-full h-full object-cover cursor-pointer hover:scale-105 transition" @click="openFullscreenMedia(getMediaUrl(mItem), false, 'Pratinjau Media Utas')">
+                            </template>
+                            <span class="absolute top-1 left-1 bg-black/60 text-white text-[8px] px-1 rounded font-bold" x-text="isVideoMedia(mItem) ? 'VIDEO' : 'IMAGE'"></span>
+                            <span class="absolute bottom-1 right-1 bg-black/60 text-white text-[8px] px-1 rounded font-mono" x-text="(mIdx + 1) + '/' + getChainMediaList(chain).length"></span>
+                          </div>
                         </template>
                       </div>
+                    </template>
 
-                      <!-- Konteks Produk Affiliate di Bagian Atas Balon Utas -->
-                      <template x-if="postDetailModal.post && postDetailModal.post.product_id && getProduct(postDetailModal.post.product_id).product_id">
-                        <div class="flex items-center space-x-1.5 pb-1">
-                          <span class="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
-                            <i data-lucide="tag" class="w-3 h-3 text-indigo-500"></i>
-                            <span class="font-bold" x-text="'Produk: ' + getProduct(postDetailModal.post.product_id).title"></span>
-                            <span class="text-emerald-600 font-bold" x-text="'(' + getProduct(postDetailModal.post.product_id).commission_pct + '%)'"></span>
-                          </span>
-                        </div>
-                      </template>
-
-                      <p class="text-xs text-slate-800 whitespace-pre-wrap leading-relaxed" x-text="chain.content_text"></p>
-
-                      <!-- Pratinjau Media Asli Rantai Utas (Multi-Media Carousel & Video Pemutar) -->
-                      <template x-if="getChainMediaList(chain).length > 0">
-                        <div class="flex overflow-x-auto space-x-2 pt-1 pb-1">
-                          <template x-for="(mItem, mIdx) in getChainMediaList(chain)" :key="'dtl-med-'+chain.chain_id+'-'+mIdx">
-                            <div class="relative w-28 h-28 rounded-xl overflow-hidden border border-slate-200 bg-slate-900 shrink-0 shadow-xs">
-                              <template x-if="isVideoMedia(mItem)">
-                                <video :src="getMediaUrl(mItem)" controls muted playsinline class="w-full h-full object-cover"></video>
-                              </template>
-                              <template x-if="!isVideoMedia(mItem)">
-                                <img :src="getMediaUrl(mItem)" class="w-full h-full object-cover cursor-pointer hover:scale-105 transition" @click="openFullscreenMedia(getMediaUrl(mItem), false, 'Pratinjau Media Utas')">
-                              </template>
-                              <span class="absolute top-1 left-1 bg-black/60 text-white text-[8px] px-1 rounded font-bold" x-text="isVideoMedia(mItem) ? 'VIDEO' : 'IMAGE'"></span>
-                              <span class="absolute bottom-1 right-1 bg-black/60 text-white text-[8px] px-1 rounded font-mono" x-text="(mIdx + 1) + '/' + getChainMediaList(chain).length"></span>
-                            </div>
-                          </template>
-                        </div>
-                      </template>
-
-                      <!-- Strip Metrik Audiens Ringkas Tepat di Bawah Utas #1 (Root Hook) -->
-                      <template x-if="cIdx === 0">
-                        <div class="pt-2 mt-1 border-t border-slate-200/60 flex flex-wrap items-center justify-between gap-2">
-                          <div class="flex items-center space-x-4 text-xs font-semibold text-slate-700">
+                    <!-- Strip Metrik & Tombol Trigger Komentar Per-Utas -->
+                    <div class="pt-2 mt-1 border-t border-slate-200/60 flex flex-wrap items-center justify-between gap-2">
+                      <div class="flex items-center space-x-4 text-xs font-semibold text-slate-700">
+                        <template x-if="cIdx === 0">
+                          <div class="flex items-center space-x-3">
                             <span class="inline-flex items-center space-x-1" title="Views"><i data-lucide="eye" class="w-3.5 h-3.5 text-slate-400"></i><span x-text="getPostMetric(postDetailModal.post.post_id, 'views')"></span></span>
                             <span class="inline-flex items-center space-x-1" title="Likes"><i data-lucide="heart" class="w-3.5 h-3.5 text-rose-500"></i><span x-text="getPostMetric(postDetailModal.post.post_id, 'likes')"></span></span>
                             <span class="inline-flex items-center space-x-1" title="Reposts"><i data-lucide="repeat" class="w-3.5 h-3.5 text-emerald-500"></i><span x-text="getPostMetric(postDetailModal.post.post_id, 'reposts')"></span></span>
-                            <span class="inline-flex items-center space-x-1" title="Komentar Masuk"><i data-lucide="message-circle" class="w-3.5 h-3.5 text-brand-500"></i><span x-text="getExternalCommentsCount(postDetailModal.post.post_id)"></span></span>
                           </div>
-                          <span class="text-[10px] text-slate-400" x-text="getPostLastSynced(postDetailModal.post.post_id) ? ('Sinkron ' + getPostLastSynced(postDetailModal.post.post_id)) : 'Belum sinkron'"></span>
-                        </div>
+                        </template>
+                        
+                        <!-- Tombol Collapsible Komentar Spesifik Utas Ini -->
+                        <button type="button" @click="toggleChainComments(chain.chain_id)" class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border transition text-xs font-semibold" :class="isChainCommentsOpen(chain.chain_id) ? 'bg-brand-50 border-brand-200 text-brand-700 font-bold' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'">
+                          <i data-lucide="message-circle" class="w-3.5 h-3.5 text-brand-600"></i>
+                          <span x-text="getCommentsForChain(chain.chain_id).length + ' Komentar'"></span>
+                          <i :data-lucide="isChainCommentsOpen(chain.chain_id) ? 'chevron-up' : 'chevron-down'" class="w-3 h-3 text-slate-400"></i>
+                        </button>
+                      </div>
+
+                      <template x-if="cIdx === 0">
+                        <span class="text-[10px] text-slate-400" x-text="getPostLastSynced(postDetailModal.post.post_id) ? ('Sinkron ' + getPostLastSynced(postDetailModal.post.post_id)) : 'Belum sinkron'"></span>
                       </template>
                     </div>
-                  </template>
-                </div>
 
-                <!-- Bagian Interaksi Komentar Masuk (Leads & Pertanyaan Calon Pembeli) -->
-                <div class="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3">
-                  <div class="flex items-center justify-between pb-2 border-b border-slate-200">
-                    <div class="flex items-center space-x-2">
-                      <div class="p-1.5 bg-brand-50 text-brand-600 rounded-lg">
-                        <i data-lucide="messages-square" class="w-4 h-4"></i>
+                    <!-- Area Komentar Spesifik Utas Ini (Collapsible / Tersembunyi Default) -->
+                    <div x-show="isChainCommentsOpen(chain.chain_id)" x-transition class="pt-2.5 mt-2 border-t border-slate-200/80 space-y-2">
+                      <div class="flex items-center justify-between text-xs">
+                        <span class="font-bold text-slate-700 flex items-center space-x-1">
+                          <i data-lucide="messages-square" class="w-3.5 h-3.5 text-brand-600"></i>
+                          <span>Komentar Masuk pada Utas Ini</span>
+                        </span>
+                        <button type="button" @click="syncCommentsForPost(postDetailModal.post.post_id)" :disabled="syncingCommentsPostId === postDetailModal.post.post_id" class="text-[10px] text-brand-600 hover:underline flex items-center space-x-1 font-semibold disabled:opacity-50">
+                          <i data-lucide="refresh-cw" class="w-3 h-3" :class="syncingCommentsPostId === postDetailModal.post.post_id ? 'animate-spin' : ''"></i>
+                          <span x-text="syncingCommentsPostId === postDetailModal.post.post_id ? 'Memindai...' : 'Sinkronkan Komentar'"></span>
+                        </button>
                       </div>
-                      <div>
-                        <h4 class="text-xs font-bold text-slate-900">Interaksi Komentar Masuk (Leads Calon Pembeli)</h4>
-                        <span class="text-[10px] text-slate-400" x-text="getPostComments(postDetailModal.post.post_id).length + ' komentar tercatat'"></span>
+
+                      <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        <template x-for="comm in getCommentsForChain(chain.chain_id)" :key="comm.comment_id">
+                          <div class="p-2.5 bg-white rounded-xl border border-slate-100 text-xs shadow-2xs space-y-1">
+                            <div class="flex items-center justify-between">
+                              <div class="flex items-center space-x-1.5">
+                                <span class="font-bold text-slate-900" x-text="'@' + comm.from_username"></span>
+                                <span :class="comm.from_username && comm.from_username.indexOf('(Author)') !== -1 ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100 font-bold'" class="px-1.5 py-0.2 rounded-full text-[9px] border" x-text="comm.from_username && comm.from_username.indexOf('(Author)') !== -1 ? 'Akun Sendiri' : 'Calon Pembeli / Lead'"></span>
+                              </div>
+                              <span class="text-[10px] text-slate-400" x-text="formatDate(comm.created_at)"></span>
+                            </div>
+                            <p class="text-slate-700 leading-relaxed font-normal" x-text="comm.text"></p>
+                            <div class="pt-0.5 flex justify-end">
+                              <button type="button" @click="openReplyModal(comm)" class="text-[10px] text-brand-600 font-bold hover:underline flex items-center space-x-0.5">
+                                <i data-lucide="reply" class="w-3 h-3"></i>
+                                <span>Balas</span>
+                              </button>
+                            </div>
+                          </div>
+                        </template>
+                        <template x-if="getCommentsForChain(chain.chain_id).length === 0">
+                          <div class="py-4 text-center text-[11px] text-slate-400 italic bg-white/70 rounded-xl border border-slate-100">
+                            Belum ada komentar publik pada utas ini.
+                          </div>
+                        </template>
                       </div>
                     </div>
-                    <button type="button" @click="syncCommentsForPost(postDetailModal.post.post_id)" :disabled="syncingCommentsPostId === postDetailModal.post.post_id" class="px-3 py-1 bg-white hover:bg-slate-100 text-brand-700 border border-slate-200 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition shadow-xs disabled:opacity-50">
-                      <i data-lucide="refresh-cw" class="w-3 h-3" :class="syncingCommentsPostId === postDetailModal.post.post_id ? 'animate-spin' : ''"></i>
-                      <span x-text="syncingCommentsPostId === postDetailModal.post.post_id ? 'Memindai...' : 'Sinkronkan Komentar'"></span>
-                    </button>
-                  </div>
 
-                  <!-- Daftar Komentar -->
-                  <div class="space-y-2 max-h-48 overflow-y-auto pr-1">
-                    <template x-for="comm in getPostComments(postDetailModal.post.post_id)" :key="comm.comment_id">
-                      <div class="p-2.5 bg-white rounded-xl border border-slate-100 text-xs shadow-2xs space-y-1">
-                        <div class="flex items-center justify-between">
-                          <div class="flex items-center space-x-1.5">
-                            <span class="font-bold text-slate-900" x-text="'@' + comm.from_username"></span>
-                            <span :class="comm.from_username && comm.from_username.indexOf('(Author)') !== -1 ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100 font-bold'" class="px-2 py-0.2 rounded-full text-[9px] border" x-text="comm.from_username && comm.from_username.indexOf('(Author)') !== -1 ? 'Akun Sendiri' : 'Calon Pembeli / Lead'"></span>
-                          </div>
-                          <span class="text-[10px] text-slate-400" x-text="formatDate(comm.created_at)"></span>
-                        </div>
-                        <p class="text-slate-700 leading-relaxed font-normal" x-text="comm.text"></p>
-                      </div>
-                    </template>
-                    <template x-if="getPostComments(postDetailModal.post.post_id).length === 0">
-                      <div class="py-6 text-center text-[11px] text-slate-400 italic">
-                        Belum ada komentar publik tersimpan untuk postingan ini. Klik tombol "Sinkronkan Komentar" di atas untuk memindai komentar dari Threads API.
-                      </div>
-                    </template>
                   </div>
-                </div>
-
+                </template>
               </div>
             </template>
           </div>
         </div>
 
-        <div class="flex items-center justify-between pt-3 border-t border-slate-100">
+        <!-- Footer Ramping Proporsional (Kloning Ringkas & Paksa Rilis di Kiri, Tutup di Kanan) -->
+        <div class="flex items-center justify-between pt-3.5 mt-2 border-t border-slate-100">
           <div class="flex items-center space-x-2">
             <template x-if="postDetailModal.post">
-              <button @click="recyclePostIntoComposer(postDetailModal.post); postDetailModal.show = false;" class="px-3.5 py-2 bg-accent-50 hover:bg-accent-100 text-accent-700 rounded-xl text-xs font-bold transition flex items-center space-x-1.5">
-                <i data-lucide="repeat" class="w-3.5 h-3.5"></i>
-                <span>Kloning ke Composer</span>
+              <button @click="recyclePostIntoComposer(postDetailModal.post); postDetailModal.show = false;" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-medium transition flex items-center space-x-1.5" title="Kloning data utas ini ke composer">
+                <i data-lucide="repeat" class="w-3.5 h-3.5 text-slate-500"></i>
+                <span>Kloning</span>
               </button>
             </template>
-            <template x-if="postDetailModal.post && postDetailModal.post.status === 'Waiting Views'">
-              <button @click="forceReleasePost(postDetailModal.post.post_id); postDetailModal.show = false;" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm">
-                <span>⚡ Paksa Rilis Utas Sekarang</span>
+
+            <!-- Tombol Paksa Rilis Eksklusif di Dalam Modal Detail Postingan -->
+            <template x-if="postDetailModal.post && isWaitingViewsPost(postDetailModal.post)">
+              <button @click="forceReleasePost(postDetailModal.post.post_id); postDetailModal.show = false;" class="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs">
+                <i data-lucide="zap" class="w-3.5 h-3.5"></i>
+                <span>⚡ Paksa Rilis Sisa Utas</span>
               </button>
             </template>
           </div>
-          <button @click="postDetailModal.show = false" class="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg">Tutup</button>
+
+          <button @click="postDetailModal.show = false" class="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition">
+            Tutup
+          </button>
         </div>
       </div>
     </div>
@@ -4157,7 +4225,7 @@
         productModal: { show: false, isEdit: false, data: { product_id: '', title: '', category: '', price: 0, description: '', affiliate_link: '', dashboard_url: '', commission_pct: 0, cover_url: '', assigned_account_ids: [] }, loading: false },
         productMediaModal: { show: false, product: null, selectedFiles: [], uploading: false, uploadPercent: 0, progressText: '', showUploadForm: false },
         mediaPickerModal: { show: false, targetChainIndex: 0, selectedMediaIds: [], openBatchIds: [] },
-        postDetailModal: { show: false, post: null },
+        postDetailModal: { show: false, post: null, activeChainCommentId: null },
         productDetailModal: { show: false, product: null },
         viralDetailModal: { show: false, item: null },
 
@@ -4261,6 +4329,26 @@
           this.$watch('dailyQueueAccountFilter', function() { self.saveDailyQueueFilters(); });
           this.$watch('dailyQueueSearch', function() { self.saveDailyQueueFilters(); });
           this.$watch('dailyQueueStatusFilter', function() { self.saveDailyQueueFilters(); });
+
+          this.$watch('postsPage', function() {
+            self.$nextTick(function() { lucide.createIcons(); });
+          });
+          this.$watch('productsPage', function() {
+            self.$nextTick(function() { lucide.createIcons(); });
+          });
+          this.$watch('postStatusFilter', function() {
+            self.postsPage = 1;
+            self.$nextTick(function() { lucide.createIcons(); });
+          });
+          this.$watch('postSortOrder', function() {
+            self.postsPage = 1;
+            self.$nextTick(function() { lucide.createIcons(); });
+          });
+          this.$watch('globalSearch', function() {
+            self.postsPage = 1;
+            self.productsPage = 1;
+            self.$nextTick(function() { lucide.createIcons(); });
+          });
 
           this.$watch('composer.account_ids', function() {
             self.pruneUnpermittedProductsFromChains();
@@ -4775,6 +4863,31 @@
           }).length;
         },
 
+        isPostLocked: function(post) {
+          if (!post) return false;
+          if (post.status === 'Published') return true;
+          var chains = this.getPostChains(post.post_id);
+          return chains.some(function(c) { return !!c.threads_post_id; });
+        },
+
+        hasUnreleasedChains: function(postId) {
+          var chains = this.getPostChains(postId);
+          if (chains.length <= 1) return false;
+          return chains.some(function(c) { return !c.threads_post_id; });
+        },
+
+        isWaitingViewsPost: function(post) {
+          if (!post) return false;
+          if (post.status === 'Waiting Views') return true;
+          return (post.publishing_mode === 'target_views' && this.hasUnreleasedChains(post.post_id));
+        },
+
+        cancelEdit: function() {
+          this.resetComposer();
+          this.switchTab('all_posts');
+          this.showToast('Edit postingan dibatalkan');
+        },
+
         get filteredPostsByTab() {
           var status = this.postStatusFilter;
           var q = this.globalSearch.toLowerCase();
@@ -4785,9 +4898,11 @@
             if (status === 'all') {
               matchStatus = true;
             } else if (status === 'queue') {
-              matchStatus = (p.status === 'Scheduled' || p.status === 'Waiting Views' || p.status === 'Draft' || p.status === 'Processing');
+              matchStatus = (p.status === 'Scheduled' || p.status === 'Draft' || p.status === 'Processing');
             } else if (status === 'published_history') {
               matchStatus = (p.status === 'Published' || p.status === 'Failed');
+            } else if (status === 'Waiting Views') {
+              matchStatus = self.isWaitingViewsPost(p);
             } else {
               matchStatus = (p.status === status);
             }
@@ -4827,6 +4942,11 @@
           }
 
           return filtered;
+        },
+
+        get paginatedPostsList() {
+          var start = (this.postsPage - 1) * this.postsPerPage;
+          return this.filteredPostsByTab.slice(start, start + this.postsPerPage);
         },
 
         get uniqueAccountCategories() {
@@ -5602,8 +5722,29 @@
 
         openPostDetail: function(post) {
           this.postDetailModal.post = post;
+          this.postDetailModal.activeChainCommentId = null;
           this.postDetailModal.show = true;
           this.$nextTick(function() { lucide.createIcons(); });
+        },
+
+        toggleChainComments: function(chainId) {
+          if (this.postDetailModal.activeChainCommentId === chainId) {
+            this.postDetailModal.activeChainCommentId = null;
+          } else {
+            this.postDetailModal.activeChainCommentId = chainId;
+          }
+          this.$nextTick(function() { lucide.createIcons(); });
+        },
+
+        isChainCommentsOpen: function(chainId) {
+          return this.postDetailModal.activeChainCommentId === chainId;
+        },
+
+        getCommentsForChain: function(chainId) {
+          if (!chainId) return [];
+          return this.postComments.filter(function(cm) {
+            return cm.chain_id === chainId;
+          });
         },
 
         toggleSelectAllComposerAccounts: function() {
@@ -6920,6 +7061,10 @@
         },
 
         editPost: function(post) {
+          if (this.isPostLocked(post)) {
+            this.showToast('Postingan yang sudah terbit telah dikunci dan tidak dapat diedit.', 'error');
+            return;
+          }
           this.composer.post_id = post.post_id;
           this.composer.account_id = post.account_id;
           this.composer.account_ids = [post.account_id];

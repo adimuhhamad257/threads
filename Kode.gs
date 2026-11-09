@@ -222,6 +222,7 @@ function setupDatabase() {
       ['cloudinary_api_key', ''],
       ['cloudinary_api_secret', ''],
       ['default_fallback_views_hours', '24'],
+      ['target_views_timeout_action', 'auto_release'],
       ['triggers_installed', 'FALSE'],
       ['best_time_pagi_start', '08:00'],
       ['best_time_pagi_end', '10:00'],
@@ -954,6 +955,23 @@ function savePostWithChains(postData, chains) {
     // Kasus 1: Mengedit postingan tunggal yang sudah ada
     if (postData.post_id) {
       var postId = String(postData.post_id).trim();
+
+      // PROTEKSI EDIT: Pos yang sudah terbit / Utas #1 sudah live dikunci total
+      var loc = findPostRowLocation(ss, postId);
+      if (loc && loc.rowValues) {
+        var existingStatus = String(loc.rowValues[6] || '');
+        if (existingStatus === 'Published') {
+          return { ok: false, message: 'Postingan yang sudah berstatus Published telah dikunci dan tidak dapat diedit.' };
+        }
+      }
+
+      var cExisting = chainsSheet.getDataRange().getValues();
+      for (var chk = 1; chk < cExisting.length; chk++) {
+        if (String(cExisting[chk][1]) === postId && cExisting[chk][6]) {
+          return { ok: false, message: 'Utas pada postingan ini sudah sukses terbit di Threads sehingga postingan dikunci total.' };
+        }
+      }
+
       var editAccId = String(postData.account_id || (postData.account_ids && postData.account_ids[0]) || '').trim();
       
       if (!editAccId || editAccId.toLowerCase() === 'undefined' || editAccId.toLowerCase() === 'null') {
@@ -963,13 +981,9 @@ function savePostWithChains(postData, chains) {
         return { ok: false, message: 'Akun Threads tidak terdaftar di sistem' };
       }
 
-      var loc = findPostRowLocation(ss, postId);
-      var existingStatus = loc && loc.rowValues ? String(loc.rowValues[6] || '') : '';
       var existingCheckUntil = loc && loc.rowValues ? String(loc.rowValues[8] || '') : '';
-
-      // Anti-downgrade: jika status eksisting sudah Waiting Views, pertahankan status tersebut
       var targetStatus = postData.status || 'Scheduled';
-      if (existingStatus === 'Waiting Views') {
+      if (loc && loc.rowValues && String(loc.rowValues[6] || '') === 'Waiting Views') {
         targetStatus = 'Waiting Views';
         if (existingCheckUntil) {
           viewCheckUntil = existingCheckUntil;
@@ -2177,16 +2191,40 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
           chainsSheet.getRange(upd1.rowIndex, 8).setValue(upd1.permalink);
           chainsSheet.getRange(upd1.rowIndex, 9).setValue(upd1.publishedAt);
         }
-        currentSheet.getRange(pIdx, 7).setValue('Waiting Views');
+
+        // Status langsung diset menjadi Published agar masuk ke riwayat/filter terbit
+        currentSheet.getRange(pIdx, 7).setValue('Published');
         currentSheet.getRange(pIdx, 11).setValue('');
 
         var currentCheckUntil = currentSheet.getRange(pIdx, 9).getValue();
+        var defaultCheckUntil = '';
         if (!currentCheckUntil || String(currentCheckUntil).trim() === '') {
-          var defaultCheckUntil = new Date(new Date().getTime() + 48 * 60 * 60 * 1000).toISOString();
+          var fallbackHours = 24;
+          try {
+            var sRows = readSheetAsJson('Settings');
+            for (var si = 0; si < sRows.length; si++) {
+              if (sRows[si].setting_key === 'default_fallback_views_hours') {
+                fallbackHours = Number(sRows[si].setting_value) || 24;
+                break;
+              }
+            }
+          } catch (e) {}
+          defaultCheckUntil = new Date(new Date().getTime() + fallbackHours * 60 * 60 * 1000).toISOString();
           currentSheet.getRange(pIdx, 9).setValue(defaultCheckUntil);
         }
 
-        return { ok: true, status: 'Waiting Views', message: 'Utas #1 berhasil terbit! Utas #2 menunggu target views tercapai.' };
+        // Pindahkan baris ke Published_Posts jika saat ini masih berada di Queue_Posts
+        if (currentSheet.getName() === 'Queue_Posts') {
+          var finishedRow = currentSheet.getRange(pIdx, 1, 1, currentSheet.getLastColumn()).getValues()[0];
+          finishedRow[6] = 'Published';
+          if (!finishedRow[8] && defaultCheckUntil) finishedRow[8] = defaultCheckUntil;
+          var pubSheet = ss.getSheetByName('Published_Posts');
+          if (!pubSheet) pubSheet = ss.insertSheet('Published_Posts');
+          pubSheet.appendRow(finishedRow);
+          currentSheet.deleteRow(pIdx);
+        }
+
+        return { ok: true, status: 'Published', message: 'Utas #1 berhasil terbit! Status Published (Utas #2 menunggu target views).' };
       }
 
       var mediaList = [];
@@ -2341,68 +2379,89 @@ function processPublishingQueue() {
 
   try {
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    var queueSheet = ss.getSheetByName('Queue_Posts') || ss.getSheetByName('Posts');
-    if (!queueSheet) return;
-    var postRows = queueSheet.getDataRange().getValues();
-    if (postRows.length <= 1) return;
-
     var now = new Date();
     var processedCount = 0;
+    var chains = readSheetAsJson('Post_Chains');
+    var analytics = readSheetAsJson('Post_Analytics');
+    var sRows = readSheetAsJson('Settings');
+    var fallbackHours = 24;
+    var timeoutAction = 'auto_release';
+    for (var si = 0; si < sRows.length; si++) {
+      if (sRows[si].setting_key === 'default_fallback_views_hours') {
+        fallbackHours = Number(sRows[si].setting_value) || 24;
+      }
+      if (sRows[si].setting_key === 'target_views_timeout_action') {
+        timeoutAction = sRows[si].setting_value || 'auto_release';
+      }
+    }
 
-    for (var pIdx = 1; pIdx < postRows.length; pIdx++) {
-      if (processedCount >= 5) break;
+    var targetSheets = ['Queue_Posts', 'Published_Posts', 'Posts'];
+    for (var s = 0; s < targetSheets.length; s++) {
+      var sheet = ss.getSheetByName(targetSheets[s]);
+      if (!sheet) continue;
+      var postRows = sheet.getDataRange().getValues();
+      if (postRows.length <= 1) continue;
 
-      var pId = String(postRows[pIdx][0] || '').trim();
-      var status = postRows[pIdx][6];
-      var schedAtStr = postRows[pIdx][7];
-      var checkUntilStr = postRows[pIdx][8];
+      for (var pIdx = 1; pIdx < postRows.length; pIdx++) {
+        if (processedCount >= 5) break;
 
-      var schedDate = schedAtStr ? new Date(schedAtStr) : null;
-      var checkUntilDate = checkUntilStr ? new Date(checkUntilStr) : null;
+        var pId = String(postRows[pIdx][0] || '').trim();
+        var status = String(postRows[pIdx][6] || '');
+        var schedAtStr = postRows[pIdx][7];
+        var checkUntilStr = postRows[pIdx][8];
+        var pubMode = String(postRows[pIdx][3] || '');
 
-      var shouldPublish = false;
-      var isWaitingViewsCheck = false;
+        var schedDate = schedAtStr ? new Date(schedAtStr) : null;
+        var checkUntilDate = checkUntilStr ? new Date(checkUntilStr) : null;
 
-      if (status === 'Scheduled' && schedDate && schedDate.getTime() <= now.getTime()) {
-        shouldPublish = true;
-      } else if (status === 'Waiting Views') {
-        var targetViews = Number(postRows[pIdx][5] || 0);
-        var chains = readSheetAsJson('Post_Chains');
-        var analytics = readSheetAsJson('Post_Analytics');
-        var rootChain = null;
-        for (var c = 0; c < chains.length; c++) {
-          if (chains[c].post_id === pId && Number(chains[c].sequence_order) === 1) {
-            rootChain = chains[c];
-            break;
+        var shouldPublish = false;
+        var isWaitingViewsCheck = false;
+
+        if (status === 'Scheduled' && schedDate && schedDate.getTime() <= now.getTime()) {
+          shouldPublish = true;
+        } else if (pubMode === 'target_views' || status === 'Waiting Views' || status === 'Published') {
+          // Cari rantai utas postingan ini
+          var postChains = [];
+          for (var c = 0; c < chains.length; c++) {
+            if (String(chains[c].post_id) === pId) {
+              postChains.push(chains[c]);
+            }
           }
-        }
-        var curViews = 0;
-        if (rootChain) {
-          for (var a = 0; a < analytics.length; a++) {
-            if (analytics[a].chain_id === rootChain.chain_id) {
-              curViews = Number(analytics[a].views_count || 0);
-              break;
+          postChains.sort(function(a, b) { return Number(a.sequence_order) - Number(b.sequence_order); });
+
+          var hasRootPublished = postChains.length > 0 && !!postChains[0].threads_post_id;
+          var hasPendingChains = postChains.some(function(chn) { return !chn.threads_post_id; });
+
+          // Hanya diproses jika Utas #1 sudah live dan masih ada sisa rantai utas yang belum rilis
+          if (hasRootPublished && hasPendingChains) {
+            var targetViews = Number(postRows[pIdx][5] || 0);
+            var rootChain = postChains[0];
+            var curViews = 0;
+            for (var a = 0; a < analytics.length; a++) {
+              if (String(analytics[a].chain_id) === String(rootChain.chain_id)) {
+                curViews = Number(analytics[a].views_count || 0);
+                break;
+              }
+            }
+
+            if (!checkUntilDate) {
+              checkUntilDate = new Date(now.getTime() + fallbackHours * 60 * 60 * 1000);
+              checkUntilStr = checkUntilDate.toISOString();
+              sheet.getRange(pIdx + 1, 9).setValue(checkUntilStr);
+            }
+
+            var isTimeout = checkUntilDate && now.getTime() >= checkUntilDate.getTime();
+            if (curViews >= targetViews || (isTimeout && timeoutAction === 'auto_release')) {
+              shouldPublish = true;
+              isWaitingViewsCheck = true;
             }
           }
         }
 
-        // Batas waktu Waiting Views: jika kosong, isi default now + 48 jam
-        if (!checkUntilDate) {
-          checkUntilDate = new Date(now.getTime() + 48 * 60 * 60 * 1000);
-          checkUntilStr = checkUntilDate.toISOString();
-          queueSheet.getRange(pIdx + 1, 9).setValue(checkUntilStr);
+        if (shouldPublish) {
+          executeSinglePostPublish(pId, isWaitingViewsCheck);
+          processedCount++;
         }
-
-        var isTimeout = checkUntilDate && now.getTime() >= checkUntilDate.getTime();
-        if (curViews >= targetViews || isTimeout) {
-          shouldPublish = true;
-          isWaitingViewsCheck = true;
-        }
-      }
-
-      if (shouldPublish) {
-        executeSinglePostPublish(pId, isWaitingViewsCheck);
-        processedCount++;
       }
     }
   } finally {
@@ -2689,8 +2748,11 @@ function syncPostAnalytics() {
     var cIdCol = chainHeaders.indexOf('chain_id');
     var pIdCol = chainHeaders.indexOf('post_id');
     var thPostIdCol = chainHeaders.indexOf('threads_post_id');
+    var pubAtCol = chainHeaders.indexOf('published_at');
 
     var anaRows = analyticsSheet.getDataRange().getValues();
+    var nowTime = new Date().getTime();
+    var windowMs = 48 * 60 * 60 * 1000; // Batas aktif 48 jam
 
     for (var i = 1; i < chainRows.length; i++) {
       var chainId = chainRows[i][cIdCol >= 0 ? cIdCol : 0];
@@ -2708,6 +2770,17 @@ function syncPostAnalytics() {
         }
       }
       if (!postObj || !postObj.account_id) continue;
+
+      // Optimasi kuota & timeout GAS: batasi sinkronisasi rutin hanya untuk postingan 48 jam terakhir
+      if (postObj.status !== 'Waiting Views') {
+        var pubDateVal = (pubAtCol >= 0 ? chainRows[i][pubAtCol] : '') || postObj.scheduled_at || postObj.created_at;
+        if (pubDateVal) {
+          var pubTime = new Date(pubDateVal).getTime();
+          if (!isNaN(pubTime) && (nowTime - pubTime > windowMs)) {
+            continue;
+          }
+        }
+      }
 
       var token = '';
       for (var a = 0; a < accounts.length; a++) {
