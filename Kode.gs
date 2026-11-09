@@ -333,7 +333,7 @@ function findPostRowLocation(ss, postId) {
  * Read Initial State for Frontend
  */
 /**
- * Auto-Release Status Mandeg: Membebaskan pos Processing yang tersangkut > 15 menit
+ * Watchdog: Membebaskan pos Processing yang tersangkut > 15 menit dan memindahkannya ke Failed
  */
 function resetStalledProcessingPosts(ss) {
   try {
@@ -346,15 +346,24 @@ function resetStalledProcessingPosts(ss) {
       if (!sheet) continue;
       var values = sheet.getDataRange().getValues();
       if (values.length <= 1) continue;
-      for (var r = 1; r < values.length; r++) {
+      for (var r = values.length - 1; r >= 1; r--) {
         var status = String(values[r][6] || '');
         if (status === 'Processing') {
           var dateVal = values[r][7] || values[r][11] || values[r][8];
           var timeMs = dateVal ? new Date(dateVal).getTime() : 0;
           if (!timeMs || (now - timeMs > timeoutMs)) {
-            sheet.getRange(r + 1, 7).setValue('Scheduled');
-            sheet.getRange(r + 1, 11).setValue('Auto-release: Status Processing direset ke Scheduled setelah timeout >15 menit.');
-            Logger.log('Post ' + values[r][0] + ' direset dari Processing ke Scheduled karena timeout.');
+            sheet.getRange(r + 1, 7).setValue('Failed');
+            sheet.getRange(r + 1, 11).setValue('Watchdog: Status Processing terhenti >15 menit. Otomatis ditandai Failed.');
+            if (sheet.getName() === 'Queue_Posts') {
+              var failRow = sheet.getRange(r + 1, 1, 1, sheet.getLastColumn()).getValues()[0];
+              failRow[6] = 'Failed';
+              failRow[10] = 'Watchdog: Status Processing terhenti >15 menit. Otomatis ditandai Failed.';
+              var pSheet = ss.getSheetByName('Published_Posts');
+              if (!pSheet) pSheet = ss.insertSheet('Published_Posts');
+              pSheet.appendRow(failRow);
+              sheet.deleteRow(r + 1);
+            }
+            Logger.log('Post ' + values[r][0] + ' direset dari Processing ke Failed karena watchdog timeout.');
           }
         }
       }
@@ -2322,7 +2331,18 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
     }
   }
   if (!account || !account.access_token) {
+    currentSheet.getRange(pIdx, 7).setValue('Failed');
     currentSheet.getRange(pIdx, 11).setValue('Akun atau Access Token tidak valid');
+    if (currentSheet.getName() === 'Queue_Posts') {
+      var noAccRow = currentSheet.getRange(pIdx, 1, 1, currentSheet.getLastColumn()).getValues()[0];
+      noAccRow[6] = 'Failed';
+      noAccRow[10] = 'Akun atau Access Token tidak valid';
+      var pubSheetNoAcc = ss.getSheetByName('Published_Posts');
+      if (!pubSheetNoAcc) pubSheetNoAcc = ss.insertSheet('Published_Posts');
+      pubSheetNoAcc.appendRow(noAccRow);
+      currentSheet.deleteRow(pIdx);
+    }
+    SpreadsheetApp.flush();
     return { ok: false, message: 'Akun atau Access Token tidak valid' };
   }
 
@@ -2524,6 +2544,15 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
   } catch (err) {
     currentSheet.getRange(pIdx, 7).setValue('Failed');
     currentSheet.getRange(pIdx, 11).setValue(err.message);
+    if (currentSheet.getName() === 'Queue_Posts') {
+      var failRow = currentSheet.getRange(pIdx, 1, 1, currentSheet.getLastColumn()).getValues()[0];
+      failRow[6] = 'Failed';
+      failRow[10] = err.message;
+      var pSheetFail = ss.getSheetByName('Published_Posts');
+      if (!pSheetFail) pSheetFail = ss.insertSheet('Published_Posts');
+      pSheetFail.appendRow(failRow);
+      currentSheet.deleteRow(pIdx);
+    }
     SpreadsheetApp.flush();
     return { ok: false, message: 'Gagal mempublikasikan utas: ' + err.message };
   }
@@ -2586,8 +2615,27 @@ function processPublishingQueue() {
         var shouldPublish = false;
         var isWaitingViewsCheck = false;
 
-        if (status === 'Scheduled' && schedDate && schedDate.getTime() <= now.getTime()) {
-          shouldPublish = true;
+        if (status === 'Scheduled' && schedDate) {
+          var overdueMs = now.getTime() - schedDate.getTime();
+          // Toleransi jadwal terlewat > 3 jam otomatis dijadikan Failed agar antrean lancar
+          if (overdueMs > 3 * 60 * 60 * 1000) {
+            sheet.getRange(pIdx + 1, 7).setValue('Failed');
+            sheet.getRange(pIdx + 1, 11).setValue('Auto-fail: Jadwal terlewat lebih dari 3 jam.');
+            if (sheet.getName() === 'Queue_Posts') {
+              var overdueRow = sheet.getRange(pIdx + 1, 1, 1, sheet.getLastColumn()).getValues()[0];
+              overdueRow[6] = 'Failed';
+              overdueRow[10] = 'Auto-fail: Jadwal terlewat lebih dari 3 jam.';
+              var pubSheetOverdue = ss.getSheetByName('Published_Posts');
+              if (!pubSheetOverdue) pubSheetOverdue = ss.insertSheet('Published_Posts');
+              pubSheetOverdue.appendRow(overdueRow);
+              sheet.deleteRow(pIdx + 1);
+              pIdx--;
+              postRows = sheet.getDataRange().getValues();
+            }
+            continue;
+          } else if (schedDate.getTime() <= now.getTime()) {
+            shouldPublish = true;
+          }
         } else if (pubMode === 'target_views' || status === 'Waiting Views' || status === 'Published') {
           // Cari rantai utas postingan ini
           var postChains = [];
