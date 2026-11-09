@@ -64,7 +64,7 @@ function readSheetAsJson(sheetName) {
   if (values.length <= 1) return [];
   var headers = values[0];
   var result = [];
-  var dateCols = ['scheduled_at', 'created_at', 'view_check_until', 'published_at', 'token_expires_at', 'last_synced_at'];
+  var dateCols = ['scheduled_at', 'created_at', 'view_check_until', 'published_at', 'token_expires_at', 'last_synced_at', 'last_checked_at', 'original_posted_date'];
 
   for (var i = 1; i < values.length; i++) {
     var row = values[i];
@@ -172,7 +172,7 @@ function setupDatabase() {
     },
     {
       name: 'Viral_Library',
-      headers: ['viral_id', 'title', 'source_url', 'chains_json', 'product_ids', 'created_at']
+      headers: ['viral_id', 'title', 'source_url', 'chains_json', 'product_ids', 'extracted_username', 'views_count', 'last_checked_at', 'original_posted_date', 'created_at']
     }
   ];
 
@@ -348,22 +348,35 @@ function getInitialData() {
 
     accounts.sort(function(a, b) { return new Date(b.created_at || 0) - new Date(a.created_at || 0); });
     products.sort(function(a, b) { return new Date(b.created_at || 0) - new Date(a.created_at || 0); });
+
+    var postChainsList = readSheetAsJson('Post_Chains');
+    var rootPubMap = {};
+    for (var pc = 0; pc < postChainsList.length; pc++) {
+      if (Number(postChainsList[pc].sequence_order) === 1 && postChainsList[pc].published_at) {
+        rootPubMap[postChainsList[pc].post_id] = new Date(postChainsList[pc].published_at).getTime();
+      }
+    }
+
     posts.sort(function(a, b) {
-      var getPri = function(item) {
-        if (item.status === 'Waiting Views') return 5;
-        if (item.status === 'Processing') return 4;
-        if (item.status === 'Scheduled') return 3;
-        if (item.status === 'Published') return 2;
-        return 1;
-      };
-      var pA = getPri(a);
-      var pB = getPri(b);
-      if (pA !== pB) return pB - pA;
-      return new Date(b.scheduled_at || b.created_at || 0) - new Date(a.scheduled_at || a.created_at || 0);
+      var tA = Math.max(
+        new Date(a.created_at || 0).getTime(),
+        new Date(a.scheduled_at || 0).getTime(),
+        rootPubMap[a.post_id] || 0
+      );
+      var tB = Math.max(
+        new Date(b.created_at || 0).getTime(),
+        new Date(b.scheduled_at || 0).getTime(),
+        rootPubMap[b.post_id] || 0
+      );
+      return tB - tA;
     });
 
     var viralLibrary = readSheetAsJson('Viral_Library');
-    viralLibrary.sort(function(a, b) { return new Date(b.created_at || 0) - new Date(a.created_at || 0); });
+    viralLibrary.sort(function(a, b) {
+      var tA = Math.max(new Date(a.last_checked_at || 0).getTime(), new Date(a.created_at || 0).getTime());
+      var tB = Math.max(new Date(b.last_checked_at || 0).getTime(), new Date(b.created_at || 0).getTime());
+      return tB - tA;
+    });
 
     var payload = {
       accounts: accounts,
@@ -373,7 +386,7 @@ function getInitialData() {
       posts: posts,
       queuePosts: queuePosts,
       publishedPosts: publishedPosts,
-      postChains: readSheetAsJson('Post_Chains'),
+      postChains: postChainsList,
       viralLibrary: viralLibrary,
       postAnalytics: readSheetAsJson('Post_Analytics'),
       postComments: readSheetAsJson('Post_Comments'),
@@ -1382,8 +1395,35 @@ function saveViralContent(viralData) {
       targetProductIds = String(viralData.product_id).trim();
     }
 
+    var cleanSourceUrl = (viralData.source_url || '').trim();
+    var extractedUsername = (viralData.extracted_username || '').trim();
+    if (!extractedUsername && cleanSourceUrl) {
+      var uMatch = cleanSourceUrl.match(/@([a-zA-Z0-9._]+)/);
+      if (uMatch && uMatch[1]) {
+        extractedUsername = uMatch[1];
+      }
+    }
+
+    var viewsCount = Number(viralData.views_count || 0);
+    var origDate = viralData.original_posted_date ? String(viralData.original_posted_date).trim() : '';
+    var lastCheckedAt = viralData.last_checked_at || nowIso;
+
     var values = sheet.getDataRange().getValues();
     var headers = values[0];
+
+    // Ensure new columns exist in sheet row 1 if missing
+    var requiredCols = ['extracted_username', 'views_count', 'last_checked_at', 'original_posted_date'];
+    var addedCol = false;
+    for (var rc = 0; rc < requiredCols.length; rc++) {
+      if (headers.indexOf(requiredCols[rc]) === -1) {
+        sheet.getRange(1, sheet.getLastColumn() + 1).setValue(requiredCols[rc]);
+        addedCol = true;
+      }
+    }
+    if (addedCol) {
+      values = sheet.getDataRange().getValues();
+      headers = values[0];
+    }
 
     var colMap = {
       viral_id: headers.indexOf('viral_id'),
@@ -1391,10 +1431,13 @@ function saveViralContent(viralData) {
       source_url: headers.indexOf('source_url'),
       chains_json: headers.indexOf('chains_json'),
       product_ids: headers.indexOf('product_ids') !== -1 ? headers.indexOf('product_ids') : headers.indexOf('product_id'),
+      extracted_username: headers.indexOf('extracted_username'),
+      views_count: headers.indexOf('views_count'),
+      last_checked_at: headers.indexOf('last_checked_at'),
+      original_posted_date: headers.indexOf('original_posted_date'),
       created_at: headers.indexOf('created_at')
     };
 
-    var cleanSourceUrl = (viralData.source_url || '').trim();
     if (cleanSourceUrl) {
       var srcCol = colMap.source_url >= 0 ? colMap.source_url : 2;
       var vIdCol = colMap.viral_id >= 0 ? colMap.viral_id : 0;
@@ -1423,9 +1466,13 @@ function saveViralContent(viralData) {
 
       if (rowIdx > 0) {
         if (colMap.title >= 0) sheet.getRange(rowIdx, colMap.title + 1).setValue(autoTitle);
-        if (colMap.source_url >= 0) sheet.getRange(rowIdx, colMap.source_url + 1).setValue(viralData.source_url || '');
+        if (colMap.source_url >= 0) sheet.getRange(rowIdx, colMap.source_url + 1).setValue(cleanSourceUrl);
         if (colMap.chains_json >= 0) sheet.getRange(rowIdx, colMap.chains_json + 1).setValue(chainsJson);
         if (colMap.product_ids >= 0) sheet.getRange(rowIdx, colMap.product_ids + 1).setValue(targetProductIds);
+        if (colMap.extracted_username >= 0) sheet.getRange(rowIdx, colMap.extracted_username + 1).setValue(extractedUsername);
+        if (colMap.views_count >= 0) sheet.getRange(rowIdx, colMap.views_count + 1).setValue(viewsCount);
+        if (colMap.last_checked_at >= 0) sheet.getRange(rowIdx, colMap.last_checked_at + 1).setValue(lastCheckedAt);
+        if (colMap.original_posted_date >= 0) sheet.getRange(rowIdx, colMap.original_posted_date + 1).setValue(origDate);
         return { ok: true, message: 'Konten viral berhasil diperbarui' };
       }
     }
@@ -1434,9 +1481,13 @@ function saveViralContent(viralData) {
     var rowObj = {
       viral_id: newId,
       title: autoTitle,
-      source_url: viralData.source_url || '',
+      source_url: cleanSourceUrl,
       chains_json: chainsJson,
       product_ids: targetProductIds,
+      extracted_username: extractedUsername,
+      views_count: viewsCount,
+      last_checked_at: lastCheckedAt,
+      original_posted_date: origDate,
       created_at: nowIso
     };
 
@@ -1452,6 +1503,62 @@ function saveViralContent(viralData) {
     sheet.appendRow(newRow);
 
     return { ok: true, message: 'Konten viral berhasil disimpan ke pustaka' };
+  } catch (err) {
+    return { ok: false, message: err.message };
+  }
+}
+
+function updateViralMetrics(viralId, viewsCount, originalPostedDate) {
+  try {
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Viral_Library');
+    if (!sheet) return { ok: false, message: 'Sheet Viral_Library tidak ditemukan' };
+    var values = sheet.getDataRange().getValues();
+    if (values.length <= 1) return { ok: false, message: 'Data tidak ditemukan' };
+    var headers = values[0];
+
+    var requiredCols = ['extracted_username', 'views_count', 'last_checked_at', 'original_posted_date'];
+    var addedCol = false;
+    for (var rc = 0; rc < requiredCols.length; rc++) {
+      if (headers.indexOf(requiredCols[rc]) === -1) {
+        sheet.getRange(1, sheet.getLastColumn() + 1).setValue(requiredCols[rc]);
+        addedCol = true;
+      }
+    }
+    if (addedCol) {
+      values = sheet.getDataRange().getValues();
+      headers = values[0];
+    }
+
+    var idCol = headers.indexOf('viral_id');
+    var viewsCol = headers.indexOf('views_count');
+    var checkCol = headers.indexOf('last_checked_at');
+    var dateCol = headers.indexOf('original_posted_date');
+    if (idCol === -1) idCol = 0;
+
+    var nowIso = new Date().toISOString();
+    var cleanViews = Number(viewsCount || 0);
+    var cleanDate = originalPostedDate ? String(originalPostedDate).trim() : '';
+
+    for (var i = 1; i < values.length; i++) {
+      if (String(values[i][idCol]) === String(viralId)) {
+        var row = i + 1;
+        if (viewsCol >= 0) sheet.getRange(row, viewsCol + 1).setValue(cleanViews);
+        if (checkCol >= 0) sheet.getRange(row, checkCol + 1).setValue(nowIso);
+        if (dateCol >= 0 && cleanDate) sheet.getRange(row, dateCol + 1).setValue(cleanDate);
+        return {
+          ok: true,
+          message: 'Metrik views dan waktu pengecekan berhasil diperbarui!',
+          data: {
+            viral_id: viralId,
+            views_count: cleanViews,
+            last_checked_at: nowIso,
+            original_posted_date: cleanDate
+          }
+        };
+      }
+    }
+    return { ok: false, message: 'Konten viral tidak ditemukan' };
   } catch (err) {
     return { ok: false, message: err.message };
   }
@@ -2609,8 +2716,21 @@ function checkMetaAccountStatus(accountId) {
       };
     }
 
-    if (rowIdx > 0 && activeCol >= 0) {
-      sheet.getRange(rowIdx, activeCol + 1).setValue('TRUE');
+    var picCol = headers.indexOf('profile_picture_url');
+    var nameCol = headers.indexOf('name');
+    var userCol = headers.indexOf('username');
+
+    if (rowIdx > 0) {
+      if (activeCol >= 0) sheet.getRange(rowIdx, activeCol + 1).setValue('TRUE');
+      if (picCol >= 0 && data.threads_profile_picture_url) {
+        sheet.getRange(rowIdx, picCol + 1).setValue(data.threads_profile_picture_url);
+      }
+      if (nameCol >= 0 && data.name) {
+        sheet.getRange(rowIdx, nameCol + 1).setValue(data.name);
+      }
+      if (userCol >= 0 && data.username) {
+        sheet.getRange(rowIdx, userCol + 1).setValue(data.username);
+      }
       SpreadsheetApp.flush();
     }
 
@@ -2621,9 +2741,10 @@ function checkMetaAccountStatus(accountId) {
         is_active: 'TRUE',
         username: data.username || targetAcc.username,
         name: data.name || targetAcc.name,
+        profile_picture_url: data.threads_profile_picture_url || targetAcc.profile_picture_url || '',
         meta_user_id: data.id
       },
-      message: 'Akun @' + (data.username || targetAcc.username) + ' aktif dan token valid!'
+      message: 'Akun @' + (data.username || targetAcc.username) + ' aktif dan data profil berhasil disinkronkan!'
     };
   } catch (err) {
     return { ok: false, message: 'Pengecekan akun Meta gagal: ' + err.message };

@@ -486,7 +486,7 @@
                 <template x-for="p in posts.slice(0, 5)" :key="'act-'+p.post_id">
                   <div @click="openPostDetail(p)" class="p-3.5 flex items-center justify-between rounded-xl cursor-pointer hover:bg-slate-50 border border-slate-100 hover:border-brand-200 transition group">
                     <div class="flex items-center space-x-3 min-w-0">
-                      <img :src="getAccount(p.account_id).profile_picture_url || 'https://via.placeholder.com/40'" class="w-9 h-9 rounded-full border border-slate-200 shrink-0">
+                      <img :src="getAccount(p.account_id).profile_picture_url || 'https://via.placeholder.com/40'" @error="this.onerror=null; this.src='https://via.placeholder.com/40'" class="w-9 h-9 rounded-full border border-slate-200 shrink-0">
                       
                       <!-- Thumbnail Media Utas Pertama (jika ada) -->
                       <template x-if="getFirstChainMediaUrl(p.post_id)">
@@ -522,42 +522,46 @@
           <div x-show="currentTab === 'all_posts'" class="space-y-4">
             <!-- Toolbar Aksi & Filter Status Terpadu -->
             <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-200 pb-3">
-              <!-- Filter Status Tabs & Sorting -->
+              <!-- Filter Status Tabs, Date Range, & Sorting -->
               <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <!-- 2 Tab Pilar: Antrean Aktif vs Riwayat Terbit -->
-                <button @click="postStatusFilter = 'queue'" :class="postStatusFilter === 'queue' ? 'bg-amber-600 text-white font-bold shadow-xs' : 'bg-surface text-slate-700 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200 flex items-center space-x-1.5">
-                  <i data-lucide="clock" class="w-3.5 h-3.5" :class="postStatusFilter === 'queue' ? 'text-white' : 'text-amber-500'"></i>
-                  <span>Antrean Aktif</span> (<span x-text="activeQueueCount"></span>)
-                </button>
-                <button @click="postStatusFilter = 'published_history'" :class="postStatusFilter === 'published_history' ? 'bg-emerald-600 text-white font-bold shadow-xs' : 'bg-surface text-slate-700 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200 flex items-center space-x-1.5">
-                  <i data-lucide="check-circle-2" class="w-3.5 h-3.5" :class="postStatusFilter === 'published_history' ? 'text-white' : 'text-emerald-500'"></i>
-                  <span>Riwayat Terbit</span> (<span x-text="publishedHistoryCount"></span>)
-                </button>
-
-                <div class="h-4 w-px bg-slate-200 mx-0.5 hidden sm:block"></div>
-
-                <button @click="postStatusFilter = 'all'" :class="postStatusFilter === 'all' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-2.5 py-1.5 rounded-xl text-xs transition border border-slate-200">
+                <button @click="postStatusFilter = 'all'" :class="postStatusFilter === 'all' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
                   <span>Semua</span> (<span x-text="manualPosts.length"></span>)
                 </button>
-                <button @click="postStatusFilter = 'Waiting Views'" :class="postStatusFilter === 'Waiting Views' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-2.5 py-1.5 rounded-xl text-xs transition border border-slate-200">
+                <button @click="postStatusFilter = 'Waiting Views'" :class="postStatusFilter === 'Waiting Views' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
                   <span>Waiting Views</span> (<span x-text="manualPosts.filter(p => isWaitingViewsPost(p)).length"></span>)
                 </button>
-                <button @click="postStatusFilter = 'Scheduled'" :class="postStatusFilter === 'Scheduled' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-2.5 py-1.5 rounded-xl text-xs transition border border-slate-200">
+                <button @click="postStatusFilter = 'Scheduled'" :class="postStatusFilter === 'Scheduled' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
                   <span>Terjadwal</span> (<span x-text="manualPosts.filter(p => p.status === 'Scheduled').length"></span>)
                 </button>
-                <button @click="postStatusFilter = 'Draft'" :class="postStatusFilter === 'Draft' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-2.5 py-1.5 rounded-xl text-xs transition border border-slate-200">
+                <button @click="postStatusFilter = 'Published'" :class="postStatusFilter === 'Published' ? 'bg-emerald-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
+                  <span>Terbit</span> (<span x-text="manualPosts.filter(p => p.status === 'Published').length"></span>)
+                </button>
+                <button @click="postStatusFilter = 'Draft'" :class="postStatusFilter === 'Draft' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
                   <span>Draft</span> (<span x-text="manualPosts.filter(p => p.status === 'Draft').length"></span>)
                 </button>
-                <button @click="postStatusFilter = 'Failed'" :class="postStatusFilter === 'Failed' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-2.5 py-1.5 rounded-xl text-xs transition border border-slate-200">
+                <button @click="postStatusFilter = 'Failed'" :class="postStatusFilter === 'Failed' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
                   <span>Gagal</span> (<span x-text="manualPosts.filter(p => p.status === 'Failed').length"></span>)
                 </button>
 
                 <div class="h-4 w-px bg-slate-200 mx-0.5 hidden sm:block"></div>
 
+                <!-- Dropdown Filter Rentang Tanggal -->
+                <div class="flex items-center space-x-1.5">
+                  <select x-model="postDateRangeFilter" class="text-xs py-1.5 px-2.5 rounded-xl border border-slate-200 bg-surface font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20">
+                    <option value="today">Hari Ini</option>
+                    <option value="yesterday">Kemarin</option>
+                    <option value="last_3_days">3 Hari Terakhir</option>
+                    <option value="last_7_days">7 Hari Terakhir</option>
+                    <option value="this_month">Bulan Ini</option>
+                    <option value="last_month">Bulan Lalu</option>
+                    <option value="all">Semua Waktu</option>
+                  </select>
+                </div>
+
                 <!-- Dropdown Sorting -->
                 <div class="flex items-center space-x-1.5">
                   <select x-model="postSortOrder" class="text-xs py-1.5 px-2.5 rounded-xl border border-slate-200 bg-surface font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/20">
-                    <option value="newest">Status Aktif / Terbaru</option>
+                    <option value="newest">Aktivitas Terbaru</option>
                     <option value="views_desc">Views Terbanyak</option>
                     <option value="scheduled">Jadwal Peluncuran</option>
                   </select>
@@ -586,7 +590,7 @@
                     <!-- Header Kartu: Akun & Status -->
                     <div class="flex items-center justify-between gap-2">
                       <div class="flex items-center space-x-2.5 min-w-0">
-                        <img :src="getAccount(post.account_id).profile_picture_url || 'https://via.placeholder.com/40'" class="w-10 h-10 rounded-full border border-slate-200 shrink-0">
+                        <img :src="getAccount(post.account_id).profile_picture_url || 'https://via.placeholder.com/40'" @error="this.onerror=null; this.src='https://via.placeholder.com/40'" class="w-10 h-10 rounded-full border border-slate-200 shrink-0">
                         <div class="min-w-0">
                           <div class="flex items-center space-x-1">
                             <span class="font-bold text-slate-900 text-xs truncate" x-text="'@' + getAccount(post.account_id).username"></span>
@@ -698,7 +702,8 @@
                           <i data-lucide="eye" class="w-4 h-4"></i>
                         </button>
 
-                        <template x-if="post.status !== 'Published'">
+                        <!-- Tombol Terbitkan Sekarang Hanya Jika Utas #1 Belum Terbit -->
+                        <template x-if="!isRootChainPublished(post)">
                           <button @click="publishPostDirectly(post.post_id)" class="min-h-[40px] flex items-center justify-center bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold rounded-xl" title="Terbitkan Sekarang">
                             <i data-lucide="send" class="w-4 h-4"></i>
                           </button>
@@ -748,7 +753,7 @@
                         <!-- Akun & Hook (Klik untuk Buka Detail) -->
                         <td class="py-3.5 px-4 cursor-pointer" @click="openPostDetail(post)">
                           <div class="flex items-start space-x-3 max-w-xs group">
-                            <img :src="getAccount(post.account_id).profile_picture_url || 'https://via.placeholder.com/40'" class="w-8 h-8 rounded-full border border-slate-200 shrink-0">
+                            <img :src="getAccount(post.account_id).profile_picture_url || 'https://via.placeholder.com/40'" @error="this.onerror=null; this.src='https://via.placeholder.com/40'" class="w-8 h-8 rounded-full border border-slate-200 shrink-0">
                             <div class="min-w-0">
                               <div class="flex items-center space-x-1">
                                 <span class="font-bold text-slate-900 truncate" x-text="'@' + getAccount(post.account_id).username"></span>
@@ -858,8 +863,8 @@
                               <i data-lucide="refresh-cw" class="w-4 h-4" :class="syncingPostIds.indexOf(post.post_id) !== -1 ? 'animate-spin' : ''"></i>
                             </button>
 
-                            <!-- Hanya Tampil Jika Belum Published -->
-                            <template x-if="post.status !== 'Published'">
+                            <!-- Tombol Terbitkan Sekarang Hanya Jika Utas #1 Belum Terbit -->
+                            <template x-if="!isRootChainPublished(post)">
                               <button @click="publishPostDirectly(post.post_id)" class="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Terbitkan Sekarang">
                                 <i data-lucide="send" class="w-4 h-4"></i>
                               </button>
@@ -886,8 +891,8 @@
                               <i data-lucide="repeat" class="w-4 h-4"></i>
                             </button>
 
-                            <!-- Tombol Hapus Hanya Aktif untuk Draft/Scheduled/Failed -->
-                            <template x-if="post.status !== 'Published'">
+                            <!-- Tombol Hapus Hanya Aktif Jika Utas #1 Belum Terbit -->
+                            <template x-if="!isRootChainPublished(post)">
                               <button @click="promptDeletePost(post.post_id)" class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 rounded-lg" title="Hapus Postingan">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i>
                               </button>
@@ -1295,7 +1300,7 @@
                         <!-- Akun Threads (@username & Nama) -->
                         <td class="py-3 px-4">
                           <div class="flex items-center space-x-3">
-                            <img :src="acc.profile_picture_url || 'https://via.placeholder.com/40'" class="w-9 h-9 rounded-full border border-slate-200 shrink-0">
+                            <img :src="acc.profile_picture_url || 'https://via.placeholder.com/40'" @error="this.onerror=null; this.src='https://via.placeholder.com/40'" class="w-9 h-9 rounded-full border border-slate-200 shrink-0">
                             <div class="min-w-0">
                               <div class="flex items-center space-x-1">
                                 <span class="font-bold text-slate-900 truncate" x-text="'@' + acc.username"></span>
@@ -1641,6 +1646,7 @@
                   <thead>
                     <tr class="bg-slate-50/75 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-semibold">
                       <th class="py-3.5 px-4">Judul & Referensi Utas</th>
+                      <th class="py-3.5 px-4">Akun & Metrik Views</th>
                       <th class="py-3.5 px-4">Produk Rujukan</th>
                       <th class="py-3.5 px-4">Rantai Utas & Media</th>
                       <th class="py-3.5 px-4 text-right">Aksi</th>
@@ -1650,7 +1656,7 @@
                     <template x-for="item in filteredViralLibrary" :key="item.viral_id">
                       <tr class="hover:bg-slate-50/50 transition">
                         <!-- Judul, Cuplikan Hook, Tanggal Subtext & Link Threads (Klik untuk Modal Detail) -->
-                        <td class="py-3 px-4 max-w-sm cursor-pointer" @click="openViralDetail(item)">
+                        <td class="py-3 px-4 max-w-xs cursor-pointer" @click="openViralDetail(item)">
                           <div class="group">
                             <h4 class="font-bold text-slate-900 text-xs group-hover:text-amber-600 transition truncate" x-text="item.title"></h4>
                             <p class="text-[11px] text-slate-500 italic line-clamp-1 mt-0.5" x-text="parseViralChains(item.chains_json)[0] ? parseViralChains(item.chains_json)[0].content_text : '-'"></p>
@@ -1664,6 +1670,32 @@
                                     <span>Tautan Sumber</span>
                                   </a>
                                 </div>
+                              </template>
+                            </div>
+                          </div>
+                        </td>
+
+                        <!-- Akun Sumber & Metrik Views (Badge @username, Views, & Waktu Terakhir Dicek) -->
+                        <td class="py-3 px-4 whitespace-nowrap cursor-pointer" @click="openViralDetail(item)">
+                          <div class="space-y-1">
+                            <div class="flex items-center space-x-1.5">
+                              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 inline-flex items-center space-x-1">
+                                <i data-lucide="at-sign" class="w-2.5 h-2.5 text-amber-600"></i>
+                                <span x-text="item.extracted_username || extractUsernameFromUrl(item.source_url) || 'anonim'"></span>
+                              </span>
+                              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 inline-flex items-center space-x-1">
+                                <i data-lucide="eye" class="w-2.5 h-2.5 text-emerald-600"></i>
+                                <span x-text="formatViewsCount(item.views_count) + ' views'"></span>
+                              </span>
+                            </div>
+                            <div class="text-[10px] text-slate-400 flex items-center space-x-1 mt-0.5">
+                              <i data-lucide="clock" class="w-2.5 h-2.5 text-slate-400 shrink-0"></i>
+                              <span x-text="item.last_checked_at ? ('Dicek ' + formatTimeAgo(item.last_checked_at)) : (item.created_at ? ('Dibuat ' + formatTimeAgo(item.created_at)) : '-')"></span>
+                              <template x-if="item.original_posted_date">
+                                <span class="text-slate-300">•</span>
+                              </template>
+                              <template x-if="item.original_posted_date">
+                                <span class="font-mono text-[9px] text-slate-400" x-text="item.original_posted_date"></span>
                               </template>
                             </div>
                           </div>
@@ -2076,7 +2108,7 @@
 
                         <!-- User Profile Dot -->
                         <div class="absolute left-0 top-0 w-8 h-8 rounded-full overflow-hidden border border-slate-200">
-                          <img :src="getSelectedAccount().profile_picture_url || 'https://via.placeholder.com/40'" class="w-full h-full object-cover">
+                          <img :src="getSelectedAccount().profile_picture_url || 'https://via.placeholder.com/40'" @error="this.onerror=null; this.src='https://via.placeholder.com/40'" class="w-full h-full object-cover">
                         </div>
 
                         <div>
@@ -3214,7 +3246,7 @@
           <div class="mt-4 max-h-[64vh] overflow-y-auto pr-1">
             <div class="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
               <!-- Sisi Kiri: Metadata & Produk Rujukan (5 Kolom) -->
-              <div class="md:col-span-5 space-y-4">
+              <div class="md:col-span-5 space-y-3.5">
                 <div>
                   <label class="block text-xs font-semibold text-slate-700 mb-1">Judul / Topik Referensi (Opsional)</label>
                   <input type="text" x-model="viralModal.data.title" placeholder="Otomatis dari Utas #1 jika kosong..." class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20">
@@ -3222,7 +3254,23 @@
 
                 <div>
                   <label class="block text-xs font-semibold text-slate-700 mb-1">Tautan Sumber Threads Asli</label>
-                  <input type="url" x-model="viralModal.data.source_url" placeholder="https://www.threads.net/@user/post/..." class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 font-mono text-[11px]">
+                  <input type="url" x-model="viralModal.data.source_url" @input="handleViralSourceUrlInput()" placeholder="https://www.threads.net/@user/post/..." class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 font-mono text-[11px]">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Username Akun (@...)</label>
+                    <input type="text" x-model="viralModal.data.extracted_username" placeholder="pearlfaves_" class="w-full text-xs p-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none font-bold text-amber-800">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Jumlah Views</label>
+                    <input type="number" min="0" x-model.number="viralModal.data.views_count" placeholder="Contoh: 15400" class="w-full text-xs p-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none font-bold text-emerald-700 font-mono">
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-semibold text-slate-700 mb-1">Tanggal Asli Postingan (Opsional)</label>
+                  <input type="date" x-model="viralModal.data.original_posted_date" class="w-full text-xs p-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none">
                 </div>
 
                 <!-- Produk Rujukan Multi-Produk dengan Kumpulan Badges Interaktif -->
@@ -3613,6 +3661,46 @@
           </div>
 
           <div class="mt-4 max-h-[58vh] overflow-y-auto space-y-3 pr-1 text-xs">
+            <!-- Widget Panel Cepat: Update Metrik Views & Waktu Pengecekan -->
+            <div class="p-3.5 bg-amber-50/70 rounded-2xl border border-amber-200 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-1.5">
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center space-x-1">
+                    <i data-lucide="at-sign" class="w-3 h-3 text-amber-600"></i>
+                    <span x-text="viralDetailModal.item ? (viralDetailModal.item.extracted_username || extractUsernameFromUrl(viralDetailModal.item.source_url) || 'Anonim') : ''"></span>
+                  </span>
+                  <span class="text-[10px] text-slate-500 font-medium">Metrik Performa Threads</span>
+                </div>
+                <span class="text-[10px] text-slate-400" x-text="viralDetailModal.item && viralDetailModal.item.last_checked_at ? ('Terakhir dicek: ' + formatTimeAgo(viralDetailModal.item.last_checked_at)) : 'Belum pernah dicek'"></span>
+              </div>
+
+              <!-- Input Cepat Views & Tanggal Asli -->
+              <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                <div class="sm:col-span-5">
+                  <label class="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Jumlah Views Organik</label>
+                  <div class="relative">
+                    <i data-lucide="eye" class="w-3.5 h-3.5 text-emerald-600 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+                    <input type="number" min="0" x-model.number="viralDetailModal.item.views_count" placeholder="Contoh: 25000" class="w-full text-xs pl-8 pr-2.5 py-1.5 rounded-xl border border-slate-200 bg-white font-mono font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+                  </div>
+                </div>
+
+                <div class="sm:col-span-4">
+                  <label class="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Tanggal Postingan</label>
+                  <input type="date" x-model="viralDetailModal.item.original_posted_date" class="w-full text-xs px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white focus:outline-none">
+                </div>
+
+                <div class="sm:col-span-3 sm:pt-4">
+                  <button type="button" @click="submitUpdateViralDetailMetrics()" :disabled="viralDetailUpdating" class="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1 shadow-xs disabled:opacity-50">
+                    <template x-if="viralDetailUpdating">
+                      <div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    </template>
+                    <i x-show="!viralDetailUpdating" data-lucide="check" class="w-3.5 h-3.5"></i>
+                    <span>Update</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <!-- Tautan Sumber Threads -->
             <template x-if="viralDetailModal.item && viralDetailModal.item.source_url">
               <div class="p-2.5 bg-sky-50 rounded-xl border border-sky-100 flex items-center justify-between">
@@ -3696,7 +3784,7 @@
           <!-- Header Akun, Status & Bar Target Views Sejajar di Atas -->
           <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3.5 border-b border-slate-100 gap-3">
             <div class="flex items-center space-x-3 min-w-0">
-              <img :src="getAccount(postDetailModal.post ? postDetailModal.post.account_id : '').profile_picture_url || 'https://via.placeholder.com/40'" class="w-11 h-11 rounded-full border border-slate-200 shrink-0 object-cover">
+              <img :src="getAccount(postDetailModal.post ? postDetailModal.post.account_id : '').profile_picture_url || 'https://via.placeholder.com/40'" @error="this.onerror=null; this.src='https://via.placeholder.com/40'" class="w-11 h-11 rounded-full border border-slate-200 shrink-0 object-cover">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-1.5">
                   <h3 class="text-sm sm:text-base font-bold text-slate-900 truncate" x-text="'@' + getAccount(postDetailModal.post ? postDetailModal.post.account_id : '').username"></h3>
@@ -3745,19 +3833,28 @@
               <div class="space-y-3">
                 <template x-for="(chain, cIdx) in getPostChains(postDetailModal.post.post_id)" :key="'dtl-chn-'+chain.chain_id">
                   <div class="p-4 bg-slate-50/75 hover:bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5 transition">
-                    <!-- Chain Title & Links -->
+                    <!-- Chain Title, Status, Action & Links -->
                     <div class="flex justify-between items-center text-xs">
                       <div class="flex items-center space-x-2">
                         <span class="w-5 h-5 rounded-full bg-brand-100 text-brand-700 font-bold text-[10px] flex items-center justify-center" x-text="cIdx + 1"></span>
                         <span class="font-bold text-slate-800" x-text="cIdx === 0 ? 'Utas #1 (Root Hook)' : 'Utas #' + (cIdx + 1) + ' (Sambungan)'"></span>
                         <span :class="chain.threads_post_id ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'" class="px-2 py-0.5 rounded-full text-[9px] font-bold" x-text="chain.threads_post_id ? 'Terbit' : 'Belum Terbit'"></span>
                       </div>
-                      <template x-if="chain.permalink">
-                        <a :href="chain.permalink" target="_blank" class="text-sky-600 hover:underline flex items-center space-x-1 font-semibold text-[11px]">
-                          <i data-lucide="external-link" class="w-3 h-3"></i>
-                          <span>Buka di Threads</span>
-                        </a>
-                      </template>
+                      <div class="flex items-center space-x-2">
+                        <!-- Tombol Aksi Paksa Rilis Eksklusif Tepat di Dekat Kartu Utas #2 -->
+                        <template x-if="cIdx > 0 && !chain.threads_post_id && isWaitingViewsPost(postDetailModal.post)">
+                          <button type="button" @click="forceReleasePost(postDetailModal.post.post_id); postDetailModal.show = false;" class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold transition flex items-center space-x-1 shadow-xs" title="Paksa rilis utas sambungan ini sekarang">
+                            <i data-lucide="zap" class="w-3 h-3"></i>
+                            <span>⚡ Paksa Rilis Utas Ini</span>
+                          </button>
+                        </template>
+                        <template x-if="chain.permalink">
+                          <a :href="chain.permalink" target="_blank" class="text-sky-600 hover:underline flex items-center space-x-1 font-semibold text-[11px]">
+                            <i data-lucide="external-link" class="w-3 h-3"></i>
+                            <span>Buka di Threads</span>
+                          </a>
+                        </template>
+                      </div>
                     </div>
 
                     <!-- Konteks Produk Affiliate -->
@@ -3863,21 +3960,13 @@
           </div>
         </div>
 
-        <!-- Footer Ramping Proporsional (Kloning Ringkas & Paksa Rilis di Kiri, Tutup di Kanan) -->
+        <!-- Footer Ramping Proporsional (Kloning Ringkas di Kiri, Tutup di Kanan) -->
         <div class="flex items-center justify-between pt-3.5 mt-2 border-t border-slate-100">
           <div class="flex items-center space-x-2">
             <template x-if="postDetailModal.post">
               <button @click="recyclePostIntoComposer(postDetailModal.post); postDetailModal.show = false;" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-medium transition flex items-center space-x-1.5" title="Kloning data utas ini ke composer">
                 <i data-lucide="repeat" class="w-3.5 h-3.5 text-slate-500"></i>
                 <span>Kloning</span>
-              </button>
-            </template>
-
-            <!-- Tombol Paksa Rilis Eksklusif di Dalam Modal Detail Postingan -->
-            <template x-if="postDetailModal.post && isWaitingViewsPost(postDetailModal.post)">
-              <button @click="forceReleasePost(postDetailModal.post.post_id); postDetailModal.show = false;" class="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs">
-                <i data-lucide="zap" class="w-3.5 h-3.5"></i>
-                <span>⚡ Paksa Rilis Sisa Utas</span>
               </button>
             </template>
           </div>
@@ -4014,7 +4103,13 @@
               <div class="p-3.5 bg-slate-50 hover:bg-white rounded-2xl border border-slate-200 hover:border-amber-300 hover:shadow-xs transition flex flex-col justify-between space-y-2.5">
                 <div class="flex items-start justify-between gap-2">
                   <div class="min-w-0">
-                    <div class="flex items-center space-x-1.5">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <template x-if="idea.extracted_username || extractUsernameFromUrl(idea.source_url)">
+                        <span class="px-2 py-0.2 rounded-full text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200" x-text="'@' + (idea.extracted_username || extractUsernameFromUrl(idea.source_url))"></span>
+                      </template>
+                      <template x-if="Number(idea.views_count || 0) > 0">
+                        <span class="px-2 py-0.2 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200" x-text="formatViewsCount(idea.views_count) + ' views'"></span>
+                      </template>
                       <template x-if="getViralProductIds(idea).length > 0">
                         <span class="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[9px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100 truncate max-w-[180px]">
                           <i data-lucide="tag" class="w-2.5 h-2.5 text-indigo-500"></i>
@@ -4140,7 +4235,8 @@
         productListSearch: '',
         productListCategoryFilter: '',
         productListAccountFilter: '',
-        postStatusFilter: 'queue',
+        postStatusFilter: 'all',
+        postDateRangeFilter: 'today',
         postSortOrder: 'newest',
         targetViewsIsCustom: false,
         mediaPickerTypeFilter: 'ALL',
@@ -4185,6 +4281,7 @@
 
         // Viral Library State
         viralSearch: '',
+        viralDetailUpdating: false,
         fullscreenModal: { show: false, url: '', isVideo: false, title: '' },
         viralModal: {
           show: false,
@@ -4196,6 +4293,9 @@
           data: {
             viral_id: '',
             title: '',
+            extracted_username: '',
+            views_count: 0,
+            original_posted_date: '',
             product_ids: [],
             source_url: '',
             chains: [
@@ -4341,6 +4441,10 @@
             self.$nextTick(function() { lucide.createIcons(); });
           });
           this.$watch('postSortOrder', function() {
+            self.postsPage = 1;
+            self.$nextTick(function() { lucide.createIcons(); });
+          });
+          this.$watch('postDateRangeFilter', function() {
             self.postsPage = 1;
             self.$nextTick(function() { lucide.createIcons(); });
           });
@@ -4863,11 +4967,73 @@
           }).length;
         },
 
+        isRootChainPublished: function(post) {
+          if (!post) return false;
+          if (post.status === 'Published') return true;
+          var chains = this.getPostChains(post.post_id);
+          return chains.length > 0 && !!chains[0].threads_post_id;
+        },
+
         isPostLocked: function(post) {
           if (!post) return false;
           if (post.status === 'Published') return true;
           var chains = this.getPostChains(post.post_id);
           return chains.some(function(c) { return !!c.threads_post_id; });
+        },
+
+        getPostLatestActivityTime: function(post) {
+          if (!post) return 0;
+          var tCreated = post.created_at ? new Date(post.created_at).getTime() : 0;
+          var tScheduled = post.scheduled_at ? new Date(post.scheduled_at).getTime() : 0;
+          var chains = this.getPostChains(post.post_id);
+          var tPub = 0;
+          if (chains.length > 0 && chains[0].published_at) {
+            tPub = new Date(chains[0].published_at).getTime();
+          }
+          return Math.max(tCreated, tScheduled, tPub);
+        },
+
+        isPostInDateRange: function(post, rangeKey) {
+          if (!rangeKey || rangeKey === 'all') return true;
+          var rawDate = post.scheduled_at || post.created_at;
+          var chains = this.getPostChains(post.post_id);
+          if (chains.length > 0 && chains[0].published_at) {
+            rawDate = chains[0].published_at;
+          }
+          if (!rawDate) return true;
+          var postTime = new Date(rawDate).getTime();
+          if (isNaN(postTime)) return true;
+
+          var now = new Date();
+          var startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+          var endToday = startToday + 24 * 60 * 60 * 1000 - 1;
+
+          if (rangeKey === 'today') {
+            return postTime >= startToday && postTime <= endToday;
+          }
+          if (rangeKey === 'yesterday') {
+            var startYesterday = startToday - 24 * 60 * 60 * 1000;
+            var endYesterday = startToday - 1;
+            return postTime >= startYesterday && postTime <= endYesterday;
+          }
+          if (rangeKey === 'last_3_days') {
+            var start3Days = startToday - 2 * 24 * 60 * 60 * 1000;
+            return postTime >= start3Days && postTime <= endToday;
+          }
+          if (rangeKey === 'last_7_days') {
+            var start7Days = startToday - 6 * 24 * 60 * 60 * 1000;
+            return postTime >= start7Days && postTime <= endToday;
+          }
+          if (rangeKey === 'this_month') {
+            var startMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+            return postTime >= startMonth;
+          }
+          if (rangeKey === 'last_month') {
+            var startLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+            var endLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).getTime();
+            return postTime >= startLastMonth && postTime <= endLastMonth;
+          }
+          return true;
         },
 
         hasUnreleasedChains: function(postId) {
@@ -4892,15 +5058,13 @@
           var status = this.postStatusFilter;
           var q = this.globalSearch.toLowerCase();
           var sortOrder = this.postSortOrder || 'newest';
+          var dateRange = this.postDateRangeFilter || 'today';
           var self = this;
           var filtered = this.manualPosts.filter(function(p) {
+            if (!self.isPostInDateRange(p, dateRange)) return false;
             var matchStatus = false;
             if (status === 'all') {
               matchStatus = true;
-            } else if (status === 'queue') {
-              matchStatus = (p.status === 'Scheduled' || p.status === 'Draft' || p.status === 'Processing');
-            } else if (status === 'published_history') {
-              matchStatus = (p.status === 'Published' || p.status === 'Failed');
             } else if (status === 'Waiting Views') {
               matchStatus = self.isWaitingViewsPost(p);
             } else {
@@ -4925,19 +5089,9 @@
               return new Date(b.scheduled_at || 0) - new Date(a.scheduled_at || 0);
             });
           } else {
+            // Urutan utama: aktivitas terbaru dari Utas #1 / baru dijadwalkan / baru dibuat
             filtered.sort(function(a, b) {
-              var getPriority = function(item) {
-                if (item.status === 'Waiting Views') return 5;
-                if (item.status === 'Processing') return 4;
-                if (item.status === 'Scheduled') return 3;
-                if (item.status === 'Published') return 2;
-                if (item.status === 'Draft') return 1;
-                return 0;
-              };
-              var pA = getPriority(a);
-              var pB = getPriority(b);
-              if (pA !== pB) return pB - pA;
-              return new Date(b.scheduled_at || b.created_at || 0) - new Date(a.scheduled_at || a.created_at || 0);
+              return self.getPostLatestActivityTime(b) - self.getPostLatestActivityTime(a);
             });
           }
 
@@ -4970,7 +5124,7 @@
         get filteredViralLibrary() {
           var q = this.viralSearch.toLowerCase().trim();
           var self = this;
-          return this.viralLibrary.filter(function(v) {
+          var list = this.viralLibrary.filter(function(v) {
             if (!q) return true;
             var pIds = self.getViralProductIds(v);
             var prodTitles = pIds.map(function(id) {
@@ -4980,9 +5134,24 @@
 
             return (v.title && v.title.toLowerCase().indexOf(q) !== -1) ||
                    (v.source_url && v.source_url.toLowerCase().indexOf(q) !== -1) ||
+                   (v.extracted_username && v.extracted_username.toLowerCase().indexOf(q) !== -1) ||
                    prodTitles.indexOf(q) !== -1 ||
                    (v.chains_json && v.chains_json.toLowerCase().indexOf(q) !== -1);
           });
+
+          list.sort(function(a, b) {
+            var timeA = Math.max(
+              new Date(a.last_checked_at || 0).getTime(),
+              new Date(a.created_at || 0).getTime()
+            );
+            var timeB = Math.max(
+              new Date(b.last_checked_at || 0).getTime(),
+              new Date(b.created_at || 0).getTime()
+            );
+            return timeB - timeA;
+          });
+
+          return list;
         },
 
         parseViralChains: function(chainsJson) {
@@ -5007,9 +5176,71 @@
         },
 
         openViralDetail: function(item) {
-          this.viralDetailModal.item = item;
+          this.viralDetailModal.item = Object.assign({}, item, {
+            views_count: Number(item.views_count || 0),
+            original_posted_date: item.original_posted_date ? String(item.original_posted_date).slice(0, 10) : '',
+            extracted_username: item.extracted_username || this.extractUsernameFromUrl(item.source_url) || ''
+          });
           this.viralDetailModal.show = true;
           this.$nextTick(function() { lucide.createIcons(); });
+        },
+
+        extractUsernameFromUrl: function(url) {
+          if (!url) return '';
+          var m = String(url).match(/@([a-zA-Z0-9._]+)/);
+          return (m && m[1]) ? m[1] : '';
+        },
+
+        handleViralSourceUrlInput: function() {
+          var parsed = this.extractUsernameFromUrl(this.viralModal.data.source_url);
+          if (parsed) {
+            this.viralModal.data.extracted_username = parsed;
+          }
+        },
+
+        formatViewsCount: function(num) {
+          var n = Number(num || 0);
+          if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+          if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+          return n.toLocaleString('id-ID');
+        },
+
+        submitUpdateViralDetailMetrics: function() {
+          if (!this.viralDetailModal.item) return;
+          this.viralDetailUpdating = true;
+          var self = this;
+          var vId = this.viralDetailModal.item.viral_id;
+          var views = this.viralDetailModal.item.views_count;
+          var pDate = this.viralDetailModal.item.original_posted_date;
+
+          google.script.run
+            .withSuccessHandler(function(res) {
+              self.viralDetailUpdating = false;
+              if (res && res.ok) {
+                self.showToast(res.message);
+                if (res.data) {
+                  self.viralDetailModal.item.last_checked_at = res.data.last_checked_at;
+                  self.viralDetailModal.item.views_count = res.data.views_count;
+                  self.viralDetailModal.item.original_posted_date = res.data.original_posted_date;
+                  var found = self.viralLibrary.find(function(v) { return v.viral_id === vId; });
+                  if (found) {
+                    found.views_count = res.data.views_count;
+                    found.last_checked_at = res.data.last_checked_at;
+                    found.original_posted_date = res.data.original_posted_date;
+                  }
+                }
+                self.refreshAllData();
+              } else {
+                self.showToast(res ? res.message : 'Gagal memperbarui views', 'error');
+              }
+              self.$nextTick(function() { lucide.createIcons(); });
+            })
+            .withFailureHandler(function(err) {
+              self.viralDetailUpdating = false;
+              self.showToast('Error: ' + err.message, 'error');
+              self.$nextTick(function() { lucide.createIcons(); });
+            })
+            .updateViralMetrics(vId, views, pDate);
         },
 
         getViralProductIds: function(item) {
@@ -5056,6 +5287,9 @@
           this.viralModal.data = {
             viral_id: '',
             title: '',
+            extracted_username: '',
+            views_count: 0,
+            original_posted_date: '',
             product_ids: [],
             source_url: '',
             chains: [
@@ -5095,6 +5329,9 @@
           this.viralModal.data = {
             viral_id: item.viral_id,
             title: item.title || '',
+            extracted_username: item.extracted_username || this.extractUsernameFromUrl(item.source_url) || '',
+            views_count: Number(item.views_count || 0),
+            original_posted_date: item.original_posted_date ? String(item.original_posted_date).slice(0, 10) : '',
             product_ids: [].concat(existingPids),
             source_url: item.source_url || '',
             chains: normalized
@@ -5233,9 +5470,14 @@
             };
           });
 
+          var cleanUsername = (this.viralModal.data.extracted_username || this.extractUsernameFromUrl(this.viralModal.data.source_url) || '').trim();
           var payload = {
             viral_id: this.viralModal.data.viral_id || '',
             title: this.viralModal.data.title,
+            extracted_username: cleanUsername,
+            views_count: Number(this.viralModal.data.views_count || 0),
+            original_posted_date: this.viralModal.data.original_posted_date || '',
+            last_checked_at: new Date().toISOString(),
             product_ids: [].concat(this.viralModal.data.product_ids || []),
             source_url: this.viralModal.data.source_url || '',
             chains: cleanChains
@@ -6497,18 +6739,27 @@
           var q = (this.composerIdeaBankModal.search || '').toLowerCase().trim();
           var self = this;
 
-          return this.viralLibrary.filter(function(v) {
+          var list = this.viralLibrary.filter(function(v) {
             var itemPids = self.getViralProductIds(v);
             if (scope === 'product' && curProductId && itemPids.indexOf(curProductId) === -1) {
               return false;
             }
             if (q) {
               var titleMatch = v.title && v.title.toLowerCase().indexOf(q) !== -1;
+              var userMatch = v.extracted_username && v.extracted_username.toLowerCase().indexOf(q) !== -1;
               var textMatch = v.chains_json && v.chains_json.toLowerCase().indexOf(q) !== -1;
-              if (!titleMatch && !textMatch) return false;
+              if (!titleMatch && !userMatch && !textMatch) return false;
             }
             return true;
           });
+
+          list.sort(function(a, b) {
+            var timeA = Math.max(new Date(a.last_checked_at || 0).getTime(), new Date(a.created_at || 0).getTime());
+            var timeB = Math.max(new Date(b.last_checked_at || 0).getTime(), new Date(b.created_at || 0).getTime());
+            return timeB - timeA;
+          });
+
+          return list;
         },
 
         applyIdeaToComposer: function(item) {
@@ -7273,6 +7524,7 @@
                   acc.is_active = 'TRUE';
                   if (res.data && res.data.username) acc.username = res.data.username;
                   if (res.data && res.data.name) acc.name = res.data.name;
+                  if (res.data && res.data.profile_picture_url) acc.profile_picture_url = res.data.profile_picture_url;
                 }
                 self.showToast(res.message);
               } else {
@@ -7322,6 +7574,7 @@
                   acc.is_active = (res && res.ok) ? 'TRUE' : 'FALSE';
                   if (res && res.data && res.data.username) acc.username = res.data.username;
                   if (res && res.data && res.data.name) acc.name = res.data.name;
+                  if (res && res.data && res.data.profile_picture_url) acc.profile_picture_url = res.data.profile_picture_url;
                 }
                 self.$nextTick(function() { lucide.createIcons(); });
                 verifyNext();
