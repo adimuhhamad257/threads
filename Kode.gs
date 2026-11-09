@@ -136,7 +136,7 @@ function setupDatabase() {
     },
     {
       name: 'Products',
-      headers: ['product_id', 'title', 'category', 'price', 'description', 'affiliate_link', 'dashboard_url', 'commission_pct', 'commission_rp', 'cover_url', 'assigned_account_ids', 'created_at']
+      headers: ['product_id', 'title', 'category', 'price', 'description', 'affiliate_link', 'dashboard_url', 'commission_pct', 'shopee_commission_pct', 'commission_rp', 'cover_url', 'assigned_account_ids', 'created_at']
     },
     {
       name: 'Media_Batches',
@@ -332,8 +332,41 @@ function findPostRowLocation(ss, postId) {
 /**
  * Read Initial State for Frontend
  */
+/**
+ * Auto-Release Status Mandeg: Membebaskan pos Processing yang tersangkut > 15 menit
+ */
+function resetStalledProcessingPosts(ss) {
+  try {
+    if (!ss) ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var now = new Date().getTime();
+    var timeoutMs = 15 * 60 * 1000;
+    var targetSheets = ['Queue_Posts', 'Posts'];
+    for (var s = 0; s < targetSheets.length; s++) {
+      var sheet = ss.getSheetByName(targetSheets[s]);
+      if (!sheet) continue;
+      var values = sheet.getDataRange().getValues();
+      if (values.length <= 1) continue;
+      for (var r = 1; r < values.length; r++) {
+        var status = String(values[r][6] || '');
+        if (status === 'Processing') {
+          var dateVal = values[r][7] || values[r][11] || values[r][8];
+          var timeMs = dateVal ? new Date(dateVal).getTime() : 0;
+          if (!timeMs || (now - timeMs > timeoutMs)) {
+            sheet.getRange(r + 1, 7).setValue('Scheduled');
+            sheet.getRange(r + 1, 11).setValue('Auto-release: Status Processing direset ke Scheduled setelah timeout >15 menit.');
+            Logger.log('Post ' + values[r][0] + ' direset dari Processing ke Scheduled karena timeout.');
+          }
+        }
+      }
+    }
+  } catch (err) {
+    Logger.log('resetStalledProcessingPosts error: ' + err.message);
+  }
+}
+
 function getInitialData() {
   try {
+    resetStalledProcessingPosts();
     var settingsRows = readSheetAsJson('Settings');
     var settingsMap = {};
     for (var s = 0; s < settingsRows.length; s++) {
@@ -504,7 +537,10 @@ function saveProduct(productData) {
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     var sheet = ss.getSheetByName('Products');
     var pId = productData.product_id;
-    var commissionRp = Math.round((Number(productData.price || 0) * Number(productData.commission_pct || 0)) / 100);
+    var xtraPct = Number(productData.commission_pct || 0);
+    var shopeePct = Number(productData.shopee_commission_pct || 0);
+    var totalPct = xtraPct + shopeePct;
+    var commissionRp = Math.round((Number(productData.price || 0) * totalPct) / 100);
     var nowIso = new Date().toISOString();
 
     var assignedAccStr = '';
@@ -514,10 +550,15 @@ function saveProduct(productData) {
       assignedAccStr = String(productData.assigned_account_ids).trim();
     }
 
+    var pValues = sheet.getDataRange().getValues();
+    var headers = pValues[0];
+    if (headers.indexOf('shopee_commission_pct') === -1) {
+      sheet.getRange(1, headers.length + 1).setValue('shopee_commission_pct');
+      headers.push('shopee_commission_pct');
+    }
+
     if (pId) {
       // Edit existing product
-      var pValues = sheet.getDataRange().getValues();
-      var headers = pValues[0];
       var pIdColIdx = headers.indexOf('product_id');
       if (pIdColIdx === -1) pIdColIdx = 0;
       var rowIdx = -1;
@@ -542,7 +583,8 @@ function saveProduct(productData) {
           description: productData.description || '',
           affiliate_link: productData.affiliate_link,
           dashboard_url: productData.dashboard_url || '',
-          commission_pct: productData.commission_pct || 0,
+          commission_pct: xtraPct,
+          shopee_commission_pct: shopeePct,
           commission_rp: commissionRp,
           cover_url: productData.cover_url !== undefined ? productData.cover_url : existingCover,
           assigned_account_ids: assignedAccStr,
@@ -572,7 +614,8 @@ function saveProduct(productData) {
       description: productData.description || '',
       affiliate_link: productData.affiliate_link,
       dashboard_url: productData.dashboard_url || '',
-      commission_pct: productData.commission_pct || 0,
+      commission_pct: xtraPct,
+      shopee_commission_pct: shopeePct,
       commission_rp: commissionRp,
       cover_url: productData.cover_url || '',
       assigned_account_ids: assignedAccStr,
@@ -988,9 +1031,12 @@ function savePostWithChains(postData, chains) {
       var editAccId = String(postData.account_id || (postData.account_ids && postData.account_ids[0]) || '').trim();
       
       if (!editAccId || editAccId.toLowerCase() === 'undefined' || editAccId.toLowerCase() === 'null') {
-        return { ok: false, message: 'Akun Threads tidak valid atau belum dipilih' };
+        if (targetStatus !== 'Draft') {
+          return { ok: false, message: 'Akun Threads tidak valid atau belum dipilih' };
+        }
+        editAccId = '';
       }
-      if (Object.keys(validAccounts).length > 0 && !validAccounts[editAccId]) {
+      if (editAccId && Object.keys(validAccounts).length > 0 && !validAccounts[editAccId]) {
         return { ok: false, message: 'Akun Threads tidak terdaftar di sistem' };
       }
 
@@ -1101,7 +1147,11 @@ function savePostWithChains(postData, chains) {
     }
 
     if (targetAccounts.length === 0) {
-      return { ok: false, message: 'Pilih setidaknya satu akun Threads yang valid' };
+      if (postData.status === 'Draft') {
+        targetAccounts = [''];
+      } else {
+        return { ok: false, message: 'Pilih setidaknya satu akun Threads yang valid' };
+      }
     }
 
     var createdPostIds = [];
@@ -1770,25 +1820,47 @@ function toggleAutomationTriggers(enable) {
  */
 function publishPostNow(postId) {
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(5000)) {
-    return { ok: false, message: 'Server sedang memproses antrean lain. Silakan coba kembali.' };
+  var acquired = false;
+  try {
+    acquired = lock.tryLock(15000);
+  } catch (lockErr) {
+    acquired = false;
+  }
+  if (!acquired) {
+    return { ok: false, message: 'Server sedang sibuk memproses antrean lain. Silakan coba lagi dalam beberapa detik.' };
   }
   try {
+    resetStalledProcessingPosts();
     return executeSinglePostPublish(postId, false);
   } finally {
-    lock.releaseLock();
+    try {
+      lock.releaseLock();
+    } catch (e) {
+      Logger.log('Lock release warning (publishPostNow): ' + e.message);
+    }
   }
 }
 
 function forceReleasePost(postId) {
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(5000)) {
-    return { ok: false, message: 'Server sedang memproses antrean lain. Silakan coba kembali.' };
+  var acquired = false;
+  try {
+    acquired = lock.tryLock(15000);
+  } catch (lockErr) {
+    acquired = false;
+  }
+  if (!acquired) {
+    return { ok: false, message: 'Server sedang sibuk memproses antrean lain. Silakan coba lagi dalam beberapa detik.' };
   }
   try {
+    resetStalledProcessingPosts();
     return executeSinglePostPublish(postId, true);
   } finally {
-    lock.releaseLock();
+    try {
+      lock.releaseLock();
+    } catch (e) {
+      Logger.log('Lock release warning (forceReleasePost): ' + e.message);
+    }
   }
 }
 
@@ -2254,6 +2326,10 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
     return { ok: false, message: 'Akun atau Access Token tidak valid' };
   }
 
+  // Kunci status sementara ke Processing agar tidak diambil antrean ganda
+  currentSheet.getRange(pIdx, 7).setValue('Processing');
+  SpreadsheetApp.flush();
+
   var postChains = [];
   for (var cIdx = 1; cIdx < chainRows.length; cIdx++) {
     if (String(chainRows[cIdx][1]) === String(postId)) {
@@ -2458,13 +2534,20 @@ function executeSinglePostPublish(postId, isWaitingViewsCheck) {
  */
 function processPublishingQueue() {
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) {
+  var acquired = false;
+  try {
+    acquired = lock.tryLock(30000);
+  } catch (e) {
+    acquired = false;
+  }
+  if (!acquired) {
     Logger.log('processPublishingQueue dilewati: lock tidak tersedia setelah menunggu 30 detik.');
     return;
   }
 
   try {
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    resetStalledProcessingPosts(ss);
     var now = new Date();
     var processedCount = 0;
     var chains = readSheetAsJson('Post_Chains');
@@ -2540,6 +2623,20 @@ function processPublishingQueue() {
             if (curViews >= targetViews || (isTimeout && timeoutAction === 'auto_release')) {
               shouldPublish = true;
               isWaitingViewsCheck = true;
+            } else if (isTimeout && timeoutAction !== 'auto_release') {
+              sheet.getRange(pIdx + 1, 7).setValue('Closed');
+              sheet.getRange(pIdx + 1, 11).setValue('Closed: Batas waktu target views berakhir, Utas #2 batal rilis.');
+              if (sheet.getName() === 'Queue_Posts') {
+                var rowData = sheet.getRange(pIdx + 1, 1, 1, sheet.getLastColumn()).getValues()[0];
+                rowData[6] = 'Closed';
+                rowData[10] = 'Closed: Batas waktu target views berakhir, Utas #2 batal rilis.';
+                var pubSheet = ss.getSheetByName('Published_Posts');
+                if (!pubSheet) pubSheet = ss.insertSheet('Published_Posts');
+                pubSheet.appendRow(rowData);
+                sheet.deleteRow(pIdx + 1);
+                pIdx--;
+              }
+              continue;
             }
           }
         }
@@ -2551,7 +2648,11 @@ function processPublishingQueue() {
       }
     }
   } finally {
-    lock.releaseLock();
+    try {
+      lock.releaseLock();
+    } catch (e) {
+      Logger.log('Lock release warning (processPublishingQueue): ' + e.message);
+    }
   }
 }
 
@@ -2830,7 +2931,13 @@ function getCloudinaryUsageStats() {
  */
 function syncPostAnalytics() {
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(10000)) {
+  var acquired = false;
+  try {
+    acquired = lock.tryLock(10000);
+  } catch (e) {
+    acquired = false;
+  }
+  if (!acquired) {
     Logger.log('Sinkronisasi analitik & komentar dibatalkan: Sedang dikunci proses lain.');
     return;
   }
@@ -2949,6 +3056,10 @@ function syncPostAnalytics() {
   } catch (outerErr) {
     Logger.log('Exception in syncPostAnalytics: ' + outerErr.message);
   } finally {
-    lock.releaseLock();
+    try {
+      lock.releaseLock();
+    } catch (e) {
+      Logger.log('Lock release warning (syncPostAnalytics): ' + e.message);
+    }
   }
 }

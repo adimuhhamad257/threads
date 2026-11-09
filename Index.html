@@ -342,10 +342,18 @@
             <input type="text" x-model="globalSearch" placeholder="Cari postingan, akun, produk..." class="w-full pl-9 sm:pl-10 pr-3 sm:pr-10 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition">
             <span class="hidden sm:inline-block absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-semibold bg-slate-200 px-1.5 py-0.5 rounded text-slate-500">⌘ K</span>
           </div>
-          <div class="hidden sm:flex items-center space-x-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-medium text-slate-600">
-            <span class="w-2 h-2 rounded-full" :class="settings.triggers_installed === 'TRUE' ? 'bg-emerald-500' : 'bg-rose-400'"></span>
-            <span x-text="settings.triggers_installed === 'TRUE' ? 'Triggers Aktif' : 'Triggers Berhenti'"></span>
-          </div>
+          <!-- Indikator Triggers Otomasi Modern -->
+          <button @click="switchTab('settings'); settingsSubTab = 'automation';" 
+                  class="flex items-center space-x-2 px-3 py-1.5 rounded-xl border transition shadow-2xs group"
+                  :class="settings.triggers_installed === 'TRUE' ? 'bg-emerald-50/80 border-emerald-200 text-emerald-800 hover:bg-emerald-100' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'"
+                  :title="settings.triggers_installed === 'TRUE' ? 'Triggers Otomatis Aktif (Klik untuk Pengaturan)' : 'Triggers Otomatis Nonaktif (Klik untuk Pengaturan)'">
+            <span class="relative flex h-2 w-2">
+              <span x-show="settings.triggers_installed === 'TRUE'" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2" :class="settings.triggers_installed === 'TRUE' ? 'bg-emerald-500' : 'bg-rose-400'"></span>
+            </span>
+            <i data-lucide="zap" class="w-3.5 h-3.5" :class="settings.triggers_installed === 'TRUE' ? 'text-emerald-600' : 'text-slate-400'"></i>
+            <span class="hidden sm:inline text-xs font-bold" x-text="settings.triggers_installed === 'TRUE' ? 'Triggers Aktif' : 'Triggers Berhenti'"></span>
+          </button>
 
           <!-- Tombol Notifikasi Leads Komentar Masuk -->
           <button @click="openInboxWithPendingFilter()" class="relative p-2 text-slate-600 hover:text-brand-600 hover:bg-slate-100 rounded-xl transition" title="Inbox Komentar & Leads">
@@ -354,15 +362,6 @@
               <span class="absolute top-1 right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white ring-2 ring-white animate-pulse" x-text="pendingCommentsCount"></span>
             </template>
           </button>
-
-          <div class="hidden sm:block w-px h-6 bg-slate-200"></div>
-          <div class="flex items-center space-x-2 sm:space-x-3">
-            <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-brand-100 text-brand-700 font-bold flex items-center justify-center text-xs sm:text-sm border border-brand-200">OP</div>
-            <div class="text-left hidden lg:block">
-              <p class="text-xs font-semibold text-slate-800">Operator Utama</p>
-              <p class="text-[10px] text-slate-400" x-text="settings.timezone || 'Asia/Jakarta'"></p>
-            </div>
-          </div>
         </div>
       </header>
 
@@ -476,7 +475,7 @@
                       <div class="min-w-0 flex-1">
                         <div class="flex items-center space-x-1.5">
                           <span :class="rec.posts_today === 0 ? 'bg-amber-100 text-amber-800 border-amber-200 font-bold' : 'bg-emerald-100 text-emerald-800 border-emerald-200'" class="px-2 py-0.2 rounded-full text-[9px] border" x-text="rec.posts_today === 0 ? '0 Post Hari Ini' : (rec.posts_today + ' Post Hari Ini')"></span>
-                          <span class="text-[10px] font-bold text-emerald-600" x-text="'Komisi ' + rec.product.commission_pct + '%'"></span>
+                          <span class="text-[10px] font-bold text-emerald-600" x-text="'Komisi ' + getProductTotalCommissionPct(rec.product) + '%'"></span>
                         </div>
                         <h4 class="font-bold text-xs text-slate-900 mt-1 truncate" :title="rec.product.title" x-text="rec.product.title"></h4>
                         <p class="text-[11px] text-slate-500" x-text="formatRupiah(rec.product.price)"></p>
@@ -559,25 +558,64 @@
               <!-- Filter Status Tabs, Date Range, & Sorting -->
               <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <button @click="postStatusFilter = 'all'" :class="postStatusFilter === 'all' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
-                  <span>Semua</span> (<span x-text="manualPosts.length"></span>)
+                  <span>Semua</span> (<span x-text="getPostStatusCount('all')"></span>)
                 </button>
                 <button @click="postStatusFilter = 'Waiting Views'" :class="postStatusFilter === 'Waiting Views' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
-                  <span>Waiting Views</span> (<span x-text="manualPosts.filter(p => isWaitingViewsPost(p)).length"></span>)
+                  <span>Waiting Views</span> (<span x-text="getPostStatusCount('Waiting Views')"></span>)
                 </button>
                 <button @click="postStatusFilter = 'Scheduled'" :class="postStatusFilter === 'Scheduled' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
-                  <span>Terjadwal</span> (<span x-text="manualPosts.filter(p => p.status === 'Scheduled').length"></span>)
+                  <span>Terjadwal</span> (<span x-text="getPostStatusCount('Scheduled')"></span>)
                 </button>
                 <button @click="postStatusFilter = 'Published'" :class="postStatusFilter === 'Published' ? 'bg-emerald-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
-                  <span>Terbit</span> (<span x-text="manualPosts.filter(p => p.status === 'Published').length"></span>)
+                  <span>Terbit</span> (<span x-text="getPostStatusCount('Published')"></span>)
                 </button>
                 <button @click="postStatusFilter = 'Draft'" :class="postStatusFilter === 'Draft' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
-                  <span>Draft</span> (<span x-text="manualPosts.filter(p => p.status === 'Draft').length"></span>)
+                  <span>Draft</span> (<span x-text="getPostStatusCount('Draft')"></span>)
                 </button>
                 <button @click="postStatusFilter = 'Failed'" :class="postStatusFilter === 'Failed' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
-                  <span>Gagal</span> (<span x-text="manualPosts.filter(p => p.status === 'Failed').length"></span>)
+                  <span>Gagal</span> (<span x-text="getPostStatusCount('Failed')"></span>)
                 </button>
 
                 <div class="h-4 w-px bg-slate-200 mx-0.5 hidden sm:block"></div>
+
+                <!-- Dropdown Filter Akun (Avatar, Kategori, Username) -->
+                <div class="relative" @click.outside="postAccountDropdownOpen = false">
+                  <button type="button" @click="postAccountDropdownOpen = !postAccountDropdownOpen" class="text-xs py-1.5 px-2.5 rounded-xl border border-slate-200 bg-surface hover:bg-slate-50 flex items-center space-x-1.5 transition">
+                    <template x-if="!postAccountFilter">
+                      <div class="flex items-center space-x-1.5 text-slate-600">
+                        <i data-lucide="users" class="w-3.5 h-3.5 text-slate-400"></i>
+                        <span class="font-medium">Semua Akun</span>
+                      </div>
+                    </template>
+                    <template x-if="postAccountFilter && getAccount(postAccountFilter).account_id">
+                      <div class="flex items-center space-x-1.5">
+                        <img :src="getAccount(postAccountFilter).profile_picture_url || 'https://via.placeholder.com/20'" class="w-4 h-4 rounded-full border border-slate-200 shrink-0 object-cover">
+                        <span class="font-bold text-slate-800" x-text="'@' + getAccount(postAccountFilter).username"></span>
+                        <span class="text-[9px] px-1 py-0.2 rounded bg-indigo-50 text-indigo-700 font-semibold hidden sm:inline" x-text="getAccount(postAccountFilter).category || 'General'"></span>
+                      </div>
+                    </template>
+                    <i data-lucide="chevron-down" class="w-3 h-3 text-slate-400"></i>
+                  </button>
+
+                  <div x-show="postAccountDropdownOpen" x-cloak class="absolute left-0 top-full mt-1.5 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 z-30 max-h-60 overflow-y-auto space-y-1">
+                    <div @click="postAccountFilter = ''; postAccountDropdownOpen = false;" class="p-2 rounded-xl text-xs cursor-pointer hover:bg-slate-50 flex items-center space-x-2" :class="!postAccountFilter ? 'bg-brand-50 text-brand-700 font-bold' : 'text-slate-600'">
+                      <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+                      <span>Semua Akun Threads</span>
+                    </div>
+                    <template x-for="acc in accounts" :key="'post-filter-acc-'+acc.account_id">
+                      <div @click="postAccountFilter = acc.account_id; postAccountDropdownOpen = false;" class="p-2 rounded-xl text-xs cursor-pointer hover:bg-slate-50 flex items-center justify-between transition" :class="postAccountFilter === acc.account_id ? 'bg-brand-50 text-brand-700 font-bold' : 'text-slate-700'">
+                        <div class="flex items-center space-x-2 min-w-0">
+                          <img :src="acc.profile_picture_url || 'https://via.placeholder.com/32'" class="w-6 h-6 rounded-full border border-slate-200 shrink-0 object-cover">
+                          <div class="min-w-0">
+                            <span class="block truncate font-bold text-slate-900" x-text="'@' + acc.username"></span>
+                            <span class="block truncate text-[10px] text-slate-400" x-text="acc.name || acc.username"></span>
+                          </div>
+                        </div>
+                        <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 shrink-0 font-medium" x-text="acc.category || 'General'"></span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
 
                 <!-- Dropdown Filter Rentang Tanggal -->
                 <div class="flex items-center space-x-1.5">
@@ -640,7 +678,7 @@
                         <template x-if="isWaitingViewsPost(post)">
                           <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center space-x-1">
                             <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                            <span>Utas #2 Ditahan</span>
+                            <span>Menunggu Target</span>
                           </span>
                         </template>
                         <template x-if="post.status === 'Published' && !hasUnreleasedChains(post.post_id) && getPostChains(post.post_id).length > 1">
@@ -713,6 +751,7 @@
                           <span class="flex items-center space-x-1" title="Views"><i data-lucide="eye" class="w-3.5 h-3.5 text-slate-400"></i><span class="font-semibold" x-text="getPostMetric(post.post_id, 'views')"></span></span>
                           <span class="flex items-center space-x-1" title="Likes"><i data-lucide="heart" class="w-3.5 h-3.5 text-rose-400"></i><span class="font-semibold" x-text="getPostMetric(post.post_id, 'likes')"></span></span>
                           <span class="flex items-center space-x-1" title="Reposts"><i data-lucide="repeat" class="w-3.5 h-3.5 text-emerald-400"></i><span class="font-semibold" x-text="getPostMetric(post.post_id, 'reposts')"></span></span>
+                          <span class="flex items-center space-x-1" title="Komentar"><i data-lucide="message-circle" class="w-3.5 h-3.5 text-sky-500"></i><span class="font-semibold" x-text="getPostMetric(post.post_id, 'replies')"></span></span>
                         </div>
                         <div class="text-[10px] text-slate-400 flex items-center space-x-1 mt-0.5">
                           <i data-lucide="clock" class="w-2.5 h-2.5 text-slate-400 shrink-0"></i>
@@ -850,7 +889,7 @@
                               <template x-if="isWaitingViewsPost(post)">
                                 <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center space-x-1" title="Utas #1 Live di Threads, Utas #2 masih ditahan menunggu target views">
                                   <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                                  <span>Utas #2 Ditahan</span>
+                                  <span>Menunggu Target</span>
                                 </span>
                               </template>
                             </div>
@@ -881,7 +920,8 @@
                           <div class="flex items-center space-x-3 text-slate-600">
                             <span class="flex items-center space-x-1" title="Views"><i data-lucide="eye" class="w-3 h-3 text-slate-400"></i><span x-text="getPostMetric(post.post_id, 'views')"></span></span>
                             <span class="flex items-center space-x-1" title="Likes"><i data-lucide="heart" class="w-3 h-3 text-rose-400"></i><span x-text="getPostMetric(post.post_id, 'likes')"></span></span>
-                            <span class="flex items-center space-x-1" title="Reposts"><i data-lucide="repeat" class="w-3 h-3 text-emerald-400"></i><span x-text="getPostMetric(post.post_id, 'reposts')"></span></span>
+                            <span class="flex items-center space-x-1" title="Reposts"><i data-lucide="repeat" class="w-3.5 h-3.5 text-emerald-400"></i><span x-text="getPostMetric(post.post_id, 'reposts')"></span></span>
+                            <span class="flex items-center space-x-1" title="Komentar"><i data-lucide="message-circle" class="w-3 h-3 text-sky-500"></i><span x-text="getPostMetric(post.post_id, 'replies')"></span></span>
                           </div>
                           <div class="text-[10px] text-slate-400 flex items-center space-x-1 mt-1">
                             <i data-lucide="clock" class="w-2.5 h-2.5 text-slate-400 shrink-0"></i>
@@ -941,21 +981,33 @@
 
               <!-- Paginasi Tabel Postingan -->
               <div class="p-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
-                <div>
-                  <span>Menampilkan </span>
-                  <span class="font-bold" x-text="filteredPostsByTab.length > 0 ? ((postsPage - 1) * postsPerPage + 1) : 0"></span>
-                  <span> - </span>
-                  <span class="font-bold" x-text="Math.min(postsPage * postsPerPage, filteredPostsByTab.length)"></span>
-                  <span> dari </span>
-                  <span class="font-bold" x-text="filteredPostsByTab.length"></span>
-                  <span> postingan</span>
+                <div class="flex flex-wrap items-center gap-3">
+                  <div>
+                    <span>Menampilkan </span>
+                    <span class="font-bold" x-text="filteredPostsByTab.length > 0 ? ((postsPage - 1) * effectivePostsPerPage + 1) : 0"></span>
+                    <span> - </span>
+                    <span class="font-bold" x-text="Math.min(postsPage * effectivePostsPerPage, filteredPostsByTab.length)"></span>
+                    <span> dari </span>
+                    <span class="font-bold" x-text="filteredPostsByTab.length"></span>
+                    <span> postingan</span>
+                  </div>
+                  <div class="flex items-center space-x-1.5 border-l border-slate-200 pl-3">
+                    <span class="text-slate-400">Tampilkan:</span>
+                    <select x-model="postsPerPage" class="text-xs py-1 px-2 rounded-lg border border-slate-200 bg-white font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-500">
+                      <option value="10">10</option>
+                      <option value="25">25</option>
+                      <option value="50">50</option>
+                      <option value="100">100</option>
+                      <option value="all">Semua</option>
+                    </select>
+                  </div>
                 </div>
                 <div class="flex items-center space-x-2">
                   <button @click="postsPage = Math.max(1, postsPage - 1)" :disabled="postsPage <= 1" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg disabled:opacity-40 transition">
                     Sebelumnya
                   </button>
-                  <span class="px-3 py-1 bg-brand-50 text-brand-700 font-bold rounded-lg" x-text="'Hal ' + postsPage + ' / ' + Math.max(1, Math.ceil(filteredPostsByTab.length / postsPerPage))"></span>
-                  <button @click="postsPage = Math.min(Math.ceil(filteredPostsByTab.length / postsPerPage), postsPage + 1)" :disabled="postsPage >= Math.ceil(filteredPostsByTab.length / postsPerPage)" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg disabled:opacity-40 transition">
+                  <span class="px-3 py-1 bg-brand-50 text-brand-700 font-bold rounded-lg" x-text="'Hal ' + postsPage + ' / ' + Math.max(1, Math.ceil(filteredPostsByTab.length / effectivePostsPerPage))"></span>
+                  <button @click="postsPage = Math.min(Math.ceil(filteredPostsByTab.length / effectivePostsPerPage), postsPage + 1)" :disabled="postsPage >= Math.ceil(filteredPostsByTab.length / effectivePostsPerPage)" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg disabled:opacity-40 transition">
                     Berikutnya
                   </button>
                 </div>
@@ -1201,12 +1253,12 @@
                       <div class="min-w-0 flex-1">
                         <div class="flex items-center space-x-1.5">
                           <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100" x-text="prod.category || 'General'"></span>
-                          <span class="text-[10px] font-bold text-emerald-600 px-1.5 py-0.2 bg-emerald-50 rounded" x-text="'Komisi ' + prod.commission_pct + '%'"></span>
+                          <span class="text-[10px] font-bold text-emerald-600 px-1.5 py-0.2 bg-emerald-50 rounded" x-text="'Komisi ' + getProductTotalCommissionPct(prod) + '%'"></span>
                         </div>
                         <h4 class="font-bold text-xs text-slate-900 mt-1 truncate" :title="prod.title" x-text="prod.title"></h4>
                         <div class="flex items-center space-x-2 mt-0.5">
                           <span class="text-xs font-bold text-slate-800" x-text="formatRupiah(prod.price)"></span>
-                          <span class="text-[10px] text-slate-400" x-text="'(' + formatRupiah(Math.round((Number(prod.price || 0) * Number(prod.commission_pct || 0)) / 100)) + ')'"></span>
+                          <span class="text-[10px] text-slate-400" x-text="'(' + formatRupiah(getProductTotalCommissionRp(prod)) + ')'"></span>
                         </div>
                       </div>
                     </div>
@@ -1460,7 +1512,10 @@
                         <p class="text-[11px] text-slate-500 line-clamp-1 mt-0.5" x-text="prod.description || 'Tanpa deskripsi'"></p>
                         <div class="flex items-center space-x-2 mt-1">
                           <span class="text-xs font-bold text-slate-800" x-text="formatRupiah(prod.price)"></span>
-                          <span class="text-[10px] font-bold text-emerald-600 px-1.5 py-0.5 bg-emerald-50 rounded" x-text="'Komisi: ' + prod.commission_pct + '%'"></span>
+                          <span class="text-[10px] font-bold text-emerald-600 px-1.5 py-0.5 bg-emerald-50 rounded" x-text="'Komisi: ' + getProductTotalCommissionPct(prod) + '% (' + formatRupiah(getProductTotalCommissionRp(prod)) + ')'"></span>
+                        </div>
+                        <div class="text-[9px] text-slate-400 mt-0.5">
+                          <span x-text="'XTRA ' + (prod.commission_pct || 0) + '% • Shopee ' + (prod.shopee_commission_pct || 0) + '%'"></span>
                         </div>
                       </div>
                     </div>
@@ -1601,12 +1656,15 @@
                           <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-50 text-brand-600 border border-indigo-100" x-text="prod.category || 'General'"></span>
                         </td>
 
-                        <!-- Harga & Komisi Terpadu -->
+                        <!-- Harga & Komisi Terpadu (Dual Komisi) -->
                         <td class="py-3 px-4 whitespace-nowrap">
                           <div class="font-bold text-slate-800 text-xs" x-text="formatRupiah(prod.price)"></div>
                           <div class="flex items-center space-x-1.5 mt-0.5">
-                            <span class="text-[10px] font-bold text-emerald-600" x-text="prod.commission_pct + '%'"></span>
-                            <span class="text-[10px] text-slate-400" x-text="'(' + formatRupiah(Math.round((Number(prod.price || 0) * Number(prod.commission_pct || 0)) / 100)) + ')'"></span>
+                            <span class="text-[10px] font-bold text-emerald-600" x-text="getProductTotalCommissionPct(prod) + '%'"></span>
+                            <span class="text-[10px] text-slate-400" x-text="'(' + formatRupiah(getProductTotalCommissionRp(prod)) + ')'"></span>
+                          </div>
+                          <div class="text-[9px] text-slate-400 mt-0.5 font-medium">
+                            <span x-text="'XTRA ' + (prod.commission_pct || 0) + '% + Shopee ' + (prod.shopee_commission_pct || 0) + '%'"></span>
                           </div>
                         </td>
 
@@ -2910,15 +2968,26 @@
                   </datalist>
                 </div>
 
+                <div>
+                  <label class="block text-xs font-semibold text-slate-700 mb-1">Harga (Rp)</label>
+                  <input type="number" min="0" x-model.number="productModal.data.price" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 font-medium">
+                </div>
+
                 <div class="grid grid-cols-2 gap-2.5">
                   <div>
-                    <label class="block text-xs font-semibold text-slate-700 mb-1">Harga (Rp)</label>
-                    <input type="number" min="0" x-model.number="productModal.data.price" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 font-medium">
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Komisi XTRA (%)</label>
+                    <input type="number" min="0" max="100" step="0.1" x-model.number="productModal.data.commission_pct" placeholder="0" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 font-medium text-emerald-600">
                   </div>
                   <div>
-                    <label class="block text-xs font-semibold text-slate-700 mb-1">Komisi (%)</label>
-                    <input type="number" min="0" max="100" x-model.number="productModal.data.commission_pct" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 font-medium text-emerald-600">
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Komisi Shopee (%)</label>
+                    <input type="number" min="0" max="100" step="0.1" x-model.number="productModal.data.shopee_commission_pct" placeholder="0" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 font-medium text-amber-600">
                   </div>
+                </div>
+
+                <!-- Estimasi Komisi Otomatis -->
+                <div class="p-2.5 bg-emerald-50/70 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-800">
+                  <span class="font-medium">Total Estimasi Komisi:</span>
+                  <span class="font-bold" x-text="((Number(productModal.data.commission_pct || 0) + Number(productModal.data.shopee_commission_pct || 0)).toFixed(1).replace('.0', '')) + '% • ' + formatRupiah(Math.round((Number(productModal.data.price || 0) * (Number(productModal.data.commission_pct || 0) + Number(productModal.data.shopee_commission_pct || 0))) / 100))"></span>
                 </div>
 
                 <div>
@@ -3486,7 +3555,7 @@
                 <div class="flex flex-wrap items-center gap-1.5 mt-2">
                   <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100" x-text="productDetailModal.product ? (productDetailModal.product.category || 'General') : ''"></span>
                   <span class="text-xs font-bold text-slate-800" x-text="productDetailModal.product ? formatRupiah(productDetailModal.product.price) : ''"></span>
-                  <span class="text-[10px] font-bold text-emerald-600 px-2 py-0.5 rounded bg-emerald-50 border border-emerald-100" x-text="productDetailModal.product ? ('Komisi: ' + productDetailModal.product.commission_pct + '% (' + formatRupiah(Math.round((Number(productDetailModal.product.price || 0) * Number(productDetailModal.product.commission_pct || 0)) / 100)) + ')') : ''"></span>
+                  <span class="text-[10px] font-bold text-emerald-600 px-2 py-0.5 rounded bg-emerald-50 border border-emerald-100" x-text="productDetailModal.product ? ('Total Komisi: ' + getProductTotalCommissionPct(productDetailModal.product) + '% (' + formatRupiah(getProductTotalCommissionRp(productDetailModal.product)) + ') • XTRA ' + (productDetailModal.product.commission_pct || 0) + '% + Shopee ' + (productDetailModal.product.shopee_commission_pct || 0) + '%') : ''"></span>
                 </div>
               </div>
             </div>
@@ -3830,7 +3899,7 @@
                   <template x-if="postDetailModal.post && isWaitingViewsPost(postDetailModal.post)">
                     <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center space-x-1">
                       <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                      <span>Utas #2 Ditahan</span>
+                      <span>Menunggu Target</span>
                     </span>
                   </template>
                 </div>
@@ -3844,7 +3913,7 @@
 
             <!-- Target Views Header Widget Sejajar di Samping Kanan -->
             <div class="flex items-center space-x-3 self-end sm:self-center shrink-0">
-              <template x-if="postDetailModal.post && (postDetailModal.post.publishing_mode === 'target_views' || isWaitingViewsPost(postDetailModal.post))">
+              <template x-if="postDetailModal.post && isWaitingViewsPost(postDetailModal.post)">
                 <div class="w-48 sm:w-56 p-2 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
                   <div class="flex justify-between items-center text-[10px]">
                     <span class="font-bold text-slate-700 flex items-center space-x-1">
@@ -3879,7 +3948,7 @@
                       </div>
                       <div class="flex items-center space-x-2">
                         <!-- Tombol Aksi Paksa Rilis Eksklusif Tepat di Dekat Kartu Utas #2 -->
-                        <template x-if="cIdx > 0 && !chain.threads_post_id && isWaitingViewsPost(postDetailModal.post)">
+                        <template x-if="cIdx > 0 && !chain.threads_post_id && isRootChainPublished(postDetailModal.post) && isWaitingViewsPost(postDetailModal.post)">
                           <button type="button" @click="forceReleasePost(postDetailModal.post.post_id); postDetailModal.show = false;" class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold transition flex items-center space-x-1 shadow-xs" title="Paksa rilis utas sambungan ini sekarang">
                             <i data-lucide="zap" class="w-3 h-3"></i>
                             <span>⚡ Paksa Rilis Utas Ini</span>
@@ -4275,6 +4344,8 @@
         postStatusFilter: 'all',
         postDateRangeFilter: 'today',
         postSortOrder: 'newest',
+        postAccountFilter: '',
+        postAccountDropdownOpen: false,
         targetViewsIsCustom: false,
         mediaPickerTypeFilter: 'ALL',
         productDetailDescExpanded: false,
@@ -4359,7 +4430,7 @@
         toast: { show: false, message: '', type: 'success' },
         confirmModal: { show: false, title: '', message: '', onConfirm: () => {} },
         accountModal: { show: false, isEdit: false, accountId: '', token: '', category: 'General', account_persona: '', loading: false },
-        productModal: { show: false, isEdit: false, data: { product_id: '', title: '', category: '', price: 0, description: '', affiliate_link: '', dashboard_url: '', commission_pct: 0, cover_url: '', assigned_account_ids: [] }, loading: false },
+        productModal: { show: false, isEdit: false, data: { product_id: '', title: '', category: '', price: 0, description: '', affiliate_link: '', dashboard_url: '', commission_pct: 0, shopee_commission_pct: 0, cover_url: '', assigned_account_ids: [] }, loading: false },
         productMediaModal: { show: false, product: null, selectedFiles: [], uploading: false, uploadPercent: 0, progressText: '', showUploadForm: false },
         mediaPickerModal: { show: false, targetChainIndex: 0, selectedMediaIds: [], openBatchIds: [] },
         postDetailModal: { show: false, post: null, activeChainCommentId: null },
@@ -4467,6 +4538,10 @@
           this.$watch('dailyQueueSearch', function() { self.saveDailyQueueFilters(); });
           this.$watch('dailyQueueStatusFilter', function() { self.saveDailyQueueFilters(); });
 
+          this.$watch('postsPerPage', function() {
+            self.postsPage = 1;
+            self.$nextTick(function() { lucide.createIcons(); });
+          });
           this.$watch('postsPage', function() {
             self.$nextTick(function() { lucide.createIcons(); });
           });
@@ -4482,6 +4557,10 @@
             self.$nextTick(function() { lucide.createIcons(); });
           });
           this.$watch('postDateRangeFilter', function() {
+            self.postsPage = 1;
+            self.$nextTick(function() { lucide.createIcons(); });
+          });
+          this.$watch('postAccountFilter', function() {
             self.postsPage = 1;
             self.$nextTick(function() { lucide.createIcons(); });
           });
@@ -5032,6 +5111,10 @@
 
         isPostInDateRange: function(post, rangeKey) {
           if (!rangeKey || rangeKey === 'all') return true;
+          if (post) {
+            var st = String(post.status || '').toLowerCase();
+            if (st === 'draft' || st === 'failed' || st.indexOf('draft') !== -1) return true;
+          }
           var rawDate = post.scheduled_at || post.created_at;
           var chains = this.getPostChains(post.post_id);
           if (chains.length > 0 && chains[0].published_at) {
@@ -5081,14 +5164,42 @@
 
         isWaitingViewsPost: function(post) {
           if (!post) return false;
+          if (post.status === 'Draft' || post.status === 'Scheduled' || post.status === 'Closed') return false;
           if (post.status === 'Waiting Views') return true;
-          return (post.publishing_mode === 'target_views' && this.hasUnreleasedChains(post.post_id));
+          return (this.isRootChainPublished(post) && post.publishing_mode === 'target_views' && this.hasUnreleasedChains(post.post_id));
         },
 
         cancelEdit: function() {
           this.resetComposer();
           this.switchTab('all_posts');
           this.showToast('Edit postingan dibatalkan');
+        },
+
+        getPostStatusCount: function(status) {
+          var q = this.globalSearch.toLowerCase();
+          var dateRange = this.postDateRangeFilter || 'today';
+          var self = this;
+          return this.manualPosts.filter(function(p) {
+            if (self.postAccountFilter && p.account_id !== self.postAccountFilter) return false;
+            if (!self.isPostInDateRange(p, dateRange)) return false;
+            if (q) {
+              var acc = self.getAccount(p.account_id);
+              var prod = self.getProduct(p.product_id);
+              var hook = self.getFirstChainHook(p.post_id).toLowerCase();
+              var matchQ = (acc.username && acc.username.toLowerCase().indexOf(q) !== -1) ||
+                           (prod.title && prod.title.toLowerCase().indexOf(q) !== -1) ||
+                           hook.indexOf(q) !== -1;
+              if (!matchQ) return false;
+            }
+            if (status === 'all') return true;
+            if (status === 'Waiting Views') return self.isWaitingViewsPost(p);
+            return p.status === status;
+          }).length;
+        },
+
+        get effectivePostsPerPage() {
+          if (this.postsPerPage === 'all') return 999999;
+          return Number(this.postsPerPage) || 10;
         },
 
         get filteredPostsByTab() {
@@ -5098,6 +5209,7 @@
           var dateRange = this.postDateRangeFilter || 'today';
           var self = this;
           var filtered = this.manualPosts.filter(function(p) {
+            if (self.postAccountFilter && p.account_id !== self.postAccountFilter) return false;
             if (!self.isPostInDateRange(p, dateRange)) return false;
             var matchStatus = false;
             if (status === 'all') {
@@ -5136,8 +5248,9 @@
         },
 
         get paginatedPostsList() {
-          var start = (this.postsPage - 1) * this.postsPerPage;
-          return this.filteredPostsByTab.slice(start, start + this.postsPerPage);
+          var perPage = this.effectivePostsPerPage;
+          var start = (this.postsPage - 1) * perPage;
+          return this.filteredPostsByTab.slice(start, start + perPage);
         },
 
         get uniqueAccountCategories() {
@@ -5986,10 +6099,23 @@
           var total = 0;
           for (var i = 0; i < this.products.length; i++) {
             var p = this.products[i];
-            var comm = Math.round((Number(p.price || 0) * Number(p.commission_pct || 0)) / 100);
+            var comm = this.getProductTotalCommissionRp(p);
             total += comm;
           }
           return this.formatRupiah(total);
+        },
+
+        getProductTotalCommissionPct: function(prod) {
+          if (!prod) return 0;
+          var total = Number(prod.commission_pct || 0) + Number(prod.shopee_commission_pct || 0);
+          return Number(total.toFixed(2));
+        },
+
+        getProductTotalCommissionRp: function(prod) {
+          if (!prod) return 0;
+          var price = Number(prod.price || 0);
+          var totalPct = this.getProductTotalCommissionPct(prod);
+          return Math.round((price * totalPct) / 100);
         },
 
         getFirstProductMediaUrl: function(productId) {
@@ -6301,6 +6427,7 @@
             case 'Draft / Penangkaran': return 'bg-amber-100 text-amber-800';
             case 'Waiting Views': return 'bg-amber-100 text-amber-800 border border-amber-300';
             case 'Published': return 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+            case 'Closed': return 'bg-slate-100 text-slate-700 border border-slate-300';
             case 'Target Not Reached': return 'bg-slate-200 text-slate-800';
             case 'Processing': return 'bg-purple-100 text-purple-800';
             case 'Failed': return 'bg-red-100 text-red-800';
@@ -6517,6 +6644,7 @@
             affiliate_link: '',
             dashboard_url: '',
             commission_pct: 0,
+            shopee_commission_pct: 0,
             cover_url: '',
             assigned_account_ids: []
           };
@@ -6543,6 +6671,7 @@
             affiliate_link: prod.affiliate_link || '',
             dashboard_url: prod.dashboard_url || '',
             commission_pct: Number(prod.commission_pct || 0),
+            shopee_commission_pct: Number(prod.shopee_commission_pct || 0),
             cover_url: prod.cover_url || '',
             assigned_account_ids: accIds
           };
@@ -7205,7 +7334,7 @@
           this.publishActionType = 'schedule';
 
           var targetAccs = this.composer.account_ids.length > 0 ? this.composer.account_ids : (this.composer.account_id ? [this.composer.account_id] : []);
-          if (targetAccs.length === 0) {
+          if (targetAccs.length === 0 && status !== 'Draft') {
             this.composerLoading = false;
             this.showToast('Pilih setidaknya satu akun Threads', 'error');
             return;
