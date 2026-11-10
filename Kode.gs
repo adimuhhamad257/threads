@@ -1164,10 +1164,18 @@ function savePostWithChains(postData, chains) {
     }
 
     var createdPostIds = [];
+    var baseSchedMs = postData.scheduled_at ? new Date(toIsoUtcString(postData.scheduled_at)).getTime() : new Date(nowIso).getTime();
+    if (isNaN(baseSchedMs)) baseSchedMs = new Date().getTime();
+
     for (var k = 0; k < targetAccounts.length; k++) {
       var currentAccId = targetAccounts[k];
       var newPostId = 'post_' + Utilities.getUuid().slice(0, 8);
       createdPostIds.push(newPostId);
+
+      // Auto-Staggering: selisih jeda 2 menit antar akun agar tidak bentrok rate-limit
+      var accountSchedTime = (postData.status === 'Draft' || k === 0)
+        ? (toIsoUtcString(postData.scheduled_at) || nowIso)
+        : new Date(baseSchedMs + (k * 2 * 60 * 1000)).toISOString();
 
       var newPostRow = {
         post_id: newPostId,
@@ -1177,7 +1185,7 @@ function savePostWithChains(postData, chains) {
         interval_minutes: postData.interval_minutes || 3,
         target_views: isInterval ? '' : (postData.target_views || 100),
         status: postData.status || 'Scheduled',
-        scheduled_at: toIsoUtcString(postData.scheduled_at) || nowIso,
+        scheduled_at: toIsoUtcString(accountSchedTime),
         view_check_until: toIsoUtcString(viewCheckUntil),
         is_evergreen: postData.is_evergreen || 'FALSE',
         error_log: '',
@@ -1880,6 +1888,9 @@ function saveAndPublishNow(postPayload, chains) {
   var lastResult = null;
   for (var i = 0; i < postIds.length; i++) {
     lastResult = publishPostNow(postIds[i]);
+    if (i < postIds.length - 1) {
+      Utilities.sleep(2000);
+    }
   }
   return lastResult || saveRes;
 }
@@ -2601,7 +2612,8 @@ function processPublishingQueue() {
       if (postRows.length <= 1) continue;
 
       for (var pIdx = 1; pIdx < postRows.length; pIdx++) {
-        if (processedCount >= 5) break;
+        // Batch Chunking: batasi maksimal 2 pos per eksekusi cron agar terhindar dari timeout GAS
+        if (processedCount >= 2) break;
 
         var pId = String(postRows[pIdx][0] || '').trim();
         var status = String(postRows[pIdx][6] || '');
@@ -2690,8 +2702,11 @@ function processPublishingQueue() {
         }
 
         if (shouldPublish) {
-          executeSinglePostPublish(pId, isWaitingViewsCheck);
+          var execRes = executeSinglePostPublish(pId, isWaitingViewsCheck);
           processedCount++;
+          if (!execRes.ok) {
+            Logger.log('Auto-fail cepat untuk pos ' + pId + ': ' + execRes.message);
+          }
         }
       }
     }
