@@ -54,6 +54,22 @@ function toIsoUtcString(val) {
 }
 
 /**
+ * Shared Helper: Sanitasi string jam HH:mm untuk mencegah serial date 1899 di spreadsheet
+ */
+function cleanTimeString(val, defaultVal) {
+  if (!val) return defaultVal || '08:00';
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, 'Asia/Jakarta', 'HH:mm');
+  }
+  var s = String(val).trim();
+  var m = s.match(/(\d{1,2}):(\d{2})/);
+  if (m) {
+    return ('0' + m[1]).slice(-2) + ':' + m[2];
+  }
+  return defaultVal || '08:00';
+}
+
+/**
  * Normalizes rows into JSON objects using header row 1
  */
 function readSheetAsJson(sheetName) {
@@ -74,7 +90,7 @@ function readSheetAsJson(sheetName) {
       var val = row[j];
       var headerName = headers[j];
       if (val instanceof Date) {
-        if (headerName === 'generation_time') {
+        if (headerName === 'generation_time' || headerName === 'window_start' || headerName === 'window_end') {
           val = Utilities.formatDate(val, 'Asia/Jakarta', 'HH:mm');
         } else {
           val = val.toISOString();
@@ -89,6 +105,14 @@ function readSheetAsJson(sheetName) {
           val = ('0' + mGenTime[1]).slice(-2) + ':' + mGenTime[2];
         } else {
           val = '05:00';
+        }
+      }
+      if ((headerName === 'window_start' || headerName === 'window_end') && val) {
+        var mWinTime = String(val).match(/(\d{1,2}):(\d{2})/);
+        if (mWinTime) {
+          val = ('0' + mWinTime[1]).slice(-2) + ':' + mWinTime[2];
+        } else {
+          val = (headerName === 'window_start' ? '08:00' : '22:00');
         }
       }
       if (headerName === 'is_active') {
@@ -132,7 +156,7 @@ function setupDatabase() {
   var schemas = [
     {
       name: 'Accounts',
-      headers: ['account_id', 'meta_user_id', 'username', 'name', 'profile_picture_url', 'access_token', 'token_expires_at', 'is_active', 'category', 'account_persona', 'created_at']
+      headers: ['account_id', 'meta_user_id', 'username', 'name', 'profile_picture_url', 'access_token', 'token_expires_at', 'is_active', 'category', 'account_persona', 'window_start', 'window_end', 'created_at']
     },
     {
       name: 'Products',
@@ -173,6 +197,10 @@ function setupDatabase() {
     {
       name: 'Viral_Library',
       headers: ['viral_id', 'title', 'source_url', 'chains_json', 'product_ids', 'extracted_username', 'views_count', 'last_checked_at', 'original_posted_date', 'created_at']
+    },
+    {
+      name: 'Draft_Acc',
+      headers: ['draft_id', 'title', 'product_id', 'viral_id', 'chains_json', 'approval_status', 'revision_notes', 'created_at', 'updated_at']
     }
   ];
 
@@ -224,14 +252,7 @@ function setupDatabase() {
       ['default_fallback_views_hours', '24'],
       ['target_views_timeout_action', 'auto_release'],
       ['triggers_installed', 'FALSE'],
-      ['best_time_pagi_start', '08:00'],
-      ['best_time_pagi_end', '10:00'],
-      ['best_time_siang_start', '12:00'],
-      ['best_time_siang_end', '14:00'],
-      ['best_time_sore_start', '16:00'],
-      ['best_time_sore_end', '18:00'],
-      ['best_time_malam_start', '19:00'],
-      ['best_time_malam_end', '22:00']
+      ['auto_stagger_minutes', '3']
     ];
     settingsSheet.getRange(2, 1, defaults.length, 2).setValues(defaults);
   }
@@ -420,6 +441,11 @@ function getInitialData() {
       return tB - tA;
     });
 
+    var draftAcc = readSheetAsJson('Draft_Acc');
+    draftAcc.sort(function(a, b) {
+      return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    });
+
     var payload = {
       accounts: accounts,
       products: products,
@@ -432,6 +458,7 @@ function getInitialData() {
       viralLibrary: viralLibrary,
       postAnalytics: readSheetAsJson('Post_Analytics'),
       postComments: readSheetAsJson('Post_Comments'),
+      draftAcc: draftAcc,
       settings: settingsMap
     };
 
@@ -444,7 +471,7 @@ function getInitialData() {
 /**
  * Meta Threads Graph API Account Verification & Sync
  */
-function addOrSyncAccount(accessToken, category, accountPersona) {
+function addOrSyncAccount(accessToken, category, accountPersona, windowStart, windowEnd) {
   try {
     var url = 'https://graph.threads.net/v1.0/me?fields=id,username,name,threads_profile_picture_url&access_token=' + accessToken;
     var resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
@@ -457,6 +484,22 @@ function addOrSyncAccount(accessToken, category, accountPersona) {
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     var sheet = ss.getSheetByName('Accounts');
     var rows = sheet.getDataRange().getValues();
+    var headers = rows[0];
+
+    // Pastikan kolom window_start dan window_end ada
+    var wsCol = headers.indexOf('window_start');
+    var weCol = headers.indexOf('window_end');
+    if (wsCol === -1) {
+      sheet.getRange(1, headers.length + 1).setValue('window_start');
+      headers.push('window_start');
+    }
+    if (weCol === -1) {
+      sheet.getRange(1, headers.length + 1).setValue('window_end');
+      headers.push('window_end');
+    }
+    rows = sheet.getDataRange().getValues();
+    headers = rows[0];
+
     var nowIso = new Date().toISOString();
     var expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + 60); // 60 days default
@@ -465,6 +508,8 @@ function addOrSyncAccount(accessToken, category, accountPersona) {
     var rowIdxToUpdate = -1;
     var defaultCategory = category || 'General';
     var defaultPersona = accountPersona || '';
+    var defaultWStart = cleanTimeString(windowStart, '08:00');
+    var defaultWEnd = cleanTimeString(windowEnd, '22:00');
 
     for (var i = 1; i < rows.length; i++) {
       if (String(rows[i][1]) === String(data.id)) {
@@ -472,29 +517,41 @@ function addOrSyncAccount(accessToken, category, accountPersona) {
         accountId = rows[i][0];
         if (!category && rows[i][8]) defaultCategory = rows[i][8];
         if (!accountPersona && rows[i][9]) defaultPersona = rows[i][9];
+        var existingWsIdx = headers.indexOf('window_start');
+        var existingWeIdx = headers.indexOf('window_end');
+        if (!windowStart && existingWsIdx >= 0 && rows[i][existingWsIdx]) defaultWStart = cleanTimeString(rows[i][existingWsIdx], '08:00');
+        if (!windowEnd && existingWeIdx >= 0 && rows[i][existingWeIdx]) defaultWEnd = cleanTimeString(rows[i][existingWeIdx], '22:00');
         break;
       }
     }
 
-    var rowValues = [
-      accountId,
-      String(data.id),
-      data.username || '',
-      data.name || data.username || '',
-      data.threads_profile_picture_url || '',
-      accessToken,
-      expiryDate.toISOString(),
-      'TRUE',
-      defaultCategory,
-      defaultPersona,
-      nowIso
-    ];
+    var rowObj = {
+      account_id: accountId,
+      meta_user_id: String(data.id),
+      username: data.username || '',
+      name: data.name || data.username || '',
+      profile_picture_url: data.threads_profile_picture_url || '',
+      access_token: accessToken,
+      token_expires_at: expiryDate.toISOString(),
+      is_active: 'TRUE',
+      category: defaultCategory,
+      account_persona: defaultPersona,
+      window_start: defaultWStart,
+      window_end: defaultWEnd,
+      created_at: nowIso
+    };
+
+    var updateRow = [];
+    for (var h = 0; h < headers.length; h++) {
+      var key = headers[h];
+      updateRow.push(rowObj[key] !== undefined ? rowObj[key] : '');
+    }
 
     if (rowIdxToUpdate > 0) {
-      sheet.getRange(rowIdxToUpdate, 1, 1, rowValues.length).setValues([rowValues]);
+      sheet.getRange(rowIdxToUpdate, 1, 1, updateRow.length).setValues([updateRow]);
       return { ok: true, message: 'Akun @' + data.username + ' sudah terdaftar & token berhasil diperbarui!', data: { account_id: accountId, username: data.username } };
     } else {
-      sheet.appendRow(rowValues);
+      sheet.appendRow(updateRow);
       return { ok: true, message: 'Akun @' + data.username + ' berhasil ditambahkan!', data: { account_id: accountId, username: data.username } };
     }
   } catch (err) {
@@ -507,12 +564,32 @@ function updateAccountDetails(accountData) {
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     var sheet = ss.getSheetByName('Accounts');
     var values = sheet.getDataRange().getValues();
+    var headers = values[0];
+    var idCol = headers.indexOf('account_id');
+    var catCol = headers.indexOf('category');
+    var perCol = headers.indexOf('account_persona');
+    var wsCol = headers.indexOf('window_start');
+    var weCol = headers.indexOf('window_end');
+
+    if (wsCol === -1) {
+      sheet.getRange(1, headers.length + 1).setValue('window_start');
+      headers.push('window_start');
+      wsCol = headers.length - 1;
+    }
+    if (weCol === -1) {
+      sheet.getRange(1, headers.length + 1).setValue('window_end');
+      headers.push('window_end');
+      weCol = headers.length - 1;
+    }
+
     for (var i = 1; i < values.length; i++) {
-      if (String(values[i][0]) === String(accountData.account_id)) {
+      if (String(values[i][idCol >= 0 ? idCol : 0]) === String(accountData.account_id)) {
         var row = i + 1;
-        if (accountData.category !== undefined) sheet.getRange(row, 9).setValue(accountData.category);
-        if (accountData.account_persona !== undefined) sheet.getRange(row, 10).setValue(accountData.account_persona);
-        return { ok: true, message: 'Persona dan kategori akun berhasil diperbarui' };
+        if (accountData.category !== undefined && catCol >= 0) sheet.getRange(row, catCol + 1).setValue(accountData.category);
+        if (accountData.account_persona !== undefined && perCol >= 0) sheet.getRange(row, perCol + 1).setValue(accountData.account_persona);
+        if (accountData.window_start !== undefined && wsCol >= 0) sheet.getRange(row, wsCol + 1).setNumberFormat('@').setValue(cleanTimeString(accountData.window_start, '08:00'));
+        if (accountData.window_end !== undefined && weCol >= 0) sheet.getRange(row, weCol + 1).setNumberFormat('@').setValue(cleanTimeString(accountData.window_end, '22:00'));
+        return { ok: true, message: 'Persona, kategori, dan jam jendela akun berhasil diperbarui' };
       }
     }
     return { ok: false, message: 'Akun tidak ditemukan' };
@@ -1163,6 +1240,19 @@ function savePostWithChains(postData, chains) {
       }
     }
 
+    // Baca parameter jeda otomatis antar akun dari Settings
+    var staggerMin = 3;
+    try {
+      var sRows = readSheetAsJson('Settings');
+      for (var si = 0; si < sRows.length; si++) {
+        if (sRows[si].setting_key === 'auto_stagger_minutes') {
+          staggerMin = Number(sRows[si].setting_value) || 3;
+          break;
+        }
+      }
+    } catch (e) {}
+
+    var allExistingPosts = (postData.status !== 'Draft') ? getAllPostsAsJson() : [];
     var createdPostIds = [];
     var baseSchedMs = postData.scheduled_at ? new Date(toIsoUtcString(postData.scheduled_at)).getTime() : new Date(nowIso).getTime();
     if (isNaN(baseSchedMs)) baseSchedMs = new Date().getTime();
@@ -1172,10 +1262,33 @@ function savePostWithChains(postData, chains) {
       var newPostId = 'post_' + Utilities.getUuid().slice(0, 8);
       createdPostIds.push(newPostId);
 
-      // Auto-Staggering: selisih jeda 2 menit antar akun agar tidak bentrok rate-limit
-      var accountSchedTime = (postData.status === 'Draft' || k === 0)
-        ? (toIsoUtcString(postData.scheduled_at) || nowIso)
-        : new Date(baseSchedMs + (k * 2 * 60 * 1000)).toISOString();
+      var accountSchedTime = '';
+      if (postData.status === 'Draft') {
+        accountSchedTime = toIsoUtcString(postData.scheduled_at) || nowIso;
+      } else {
+        var targetTimeMs = baseSchedMs + (k * staggerMin * 60 * 1000);
+        // Validasi anti benturan: jika berdekatan (< staggerMin) dengan pos terdaftar lain, geser otomatis
+        var hasCollision = true;
+        var safetyLoop = 0;
+        while (hasCollision && safetyLoop < 40) {
+          hasCollision = false;
+          safetyLoop++;
+          for (var ep = 0; ep < allExistingPosts.length; ep++) {
+            var itemP = allExistingPosts[ep];
+            if (itemP.status === 'Scheduled' && itemP.scheduled_at) {
+              var epTimeMs = new Date(itemP.scheduled_at).getTime();
+              var diffMin = Math.abs(epTimeMs - targetTimeMs) / (60 * 1000);
+              if (diffMin < staggerMin) {
+                targetTimeMs += (staggerMin * 60 * 1000);
+                hasCollision = true;
+                break;
+              }
+            }
+          }
+        }
+        accountSchedTime = new Date(targetTimeMs).toISOString();
+        allExistingPosts.push({ status: 'Scheduled', scheduled_at: accountSchedTime });
+      }
 
       var newPostRow = {
         post_id: newPostId,
@@ -1242,7 +1355,7 @@ function deletePost(postId) {
 }
 
 /**
- * Smart Best-Time Posting Algorithm with Jitter & Collision Avoidance
+ * Smart Best-Time Posting Algorithm with Per-Account Window & Auto-Staggering
  */
 function suggestBestPostingTime(accountId) {
   try {
@@ -1253,79 +1366,71 @@ function suggestBestPostingTime(accountId) {
       settingsMap[sRows[s].setting_key] = sRows[s].setting_value;
     }
     var tz = settingsMap['timezone'] || 'Asia/Jakarta';
+    var staggerMin = Number(settingsMap['auto_stagger_minutes']) || 3;
 
-    // Jendela Waktu Rekomendasi (Pagi, Siang, Sore, Malam)
-    var windows = [
-      { name: 'Pagi', start: settingsMap['best_time_pagi_start'] || '08:00', end: settingsMap['best_time_pagi_end'] || '10:00' },
-      { name: 'Siang', start: settingsMap['best_time_siang_start'] || '12:00', end: settingsMap['best_time_siang_end'] || '14:00' },
-      { name: 'Sore', start: settingsMap['best_time_sore_start'] || '16:00', end: settingsMap['best_time_sore_end'] || '18:00' },
-      { name: 'Malam', start: settingsMap['best_time_malam_start'] || '19:00', end: settingsMap['best_time_malam_end'] || '22:00' }
-    ];
+    // Ambil jam operasional jendela khusus per-akun
+    var accounts = readSheetAsJson('Accounts');
+    var acc = null;
+    for (var a = 0; a < accounts.length; a++) {
+      if (String(accounts[a].account_id) === String(accountId)) {
+        acc = accounts[a];
+        break;
+      }
+    }
+
+    var wStart = (acc && acc.window_start) ? cleanTimeString(acc.window_start, '08:00') : '08:00';
+    var wEnd = (acc && acc.window_end) ? cleanTimeString(acc.window_end, '22:00') : '22:00';
+
+    var sParts = wStart.split(':');
+    var eParts = wEnd.split(':');
+    var startMin = Number(sParts[0]) * 60 + Number(sParts[1]);
+    var endMin = Number(eParts[0]) * 60 + Number(eParts[1]);
+    if (endMin <= startMin) endMin = startMin + 120;
 
     var now = new Date();
     var nowFormatted = Utilities.formatDate(now, tz, 'yyyy-MM-dd HH:mm');
     var timeParts = nowFormatted.split(' ')[1].split(':');
     var nowMinutes = Number(timeParts[0]) * 60 + Number(timeParts[1]);
 
-    var selectedWindow = null;
-    var targetDateOffsetDays = 0;
+    var targetOffsetDays = 0;
     var targetMinutes = 0;
 
-    // Cari jendela waktu hari ini yang masih di masa depan (minimal +15 menit)
-    for (var w = 0; w < windows.length; w++) {
-      var wItem = windows[w];
-      var sParts = (wItem.start || '00:00').split(':');
-      var eParts = (wItem.end || '23:59').split(':');
-      var sMin = Number(sParts[0]) * 60 + Number(sParts[1]);
-      var eMin = Number(eParts[0]) * 60 + Number(eParts[1]);
-
-      if (nowMinutes + 15 <= sMin) {
-        selectedWindow = wItem;
-        targetMinutes = sMin;
-        break;
-      } else if (nowMinutes + 15 <= eMin) {
-        selectedWindow = wItem;
-        targetMinutes = nowMinutes + 15;
-        break;
-      }
+    if (nowMinutes + 15 < startMin) {
+      targetMinutes = startMin;
+    } else if (nowMinutes + 15 <= endMin) {
+      targetMinutes = nowMinutes + 15;
+    } else {
+      targetOffsetDays = 1;
+      targetMinutes = startMin;
     }
 
-    // Jika seluruh jendela hari ini sudah terlewat, pilih jendela pertama besok pagi
-    if (!selectedWindow) {
-      targetDateOffsetDays = 1;
-      selectedWindow = windows[0];
-      var firstStart = (selectedWindow.start || '08:00').split(':');
-      targetMinutes = Number(firstStart[0]) * 60 + Number(firstStart[1]);
-    }
-
-    // Tambah variasi jitter anti-fingerprinting (2 sampai 7 menit)
-    var jitter = Math.floor(Math.random() * 6) + 2;
+    // Variasi jitter 1 - 5 menit anti bot fingerprinting
+    var jitter = Math.floor(Math.random() * 5) + 1;
     targetMinutes += jitter;
 
-    var targetBase = new Date(now.getTime() + targetDateOffsetDays * 24 * 60 * 60 * 1000);
+    var targetBase = new Date(now.getTime() + targetOffsetDays * 24 * 60 * 60 * 1000);
     var baseDateStr = Utilities.formatDate(targetBase, tz, 'yyyy/MM/dd');
     var targetHour = Math.floor(targetMinutes / 60);
     var targetMinute = targetMinutes % 60;
     var candidateDate = new Date(baseDateStr + ' ' + ('0' + targetHour).slice(-2) + ':' + ('0' + targetMinute).slice(-2) + ':00');
 
-    // Validasi mutlak: waktu rekomendasi harus di masa depan
     if (candidateDate.getTime() <= now.getTime()) {
-      candidateDate = new Date(now.getTime() + 20 * 60 * 1000);
+      candidateDate = new Date(now.getTime() + 15 * 60 * 1000);
     }
 
-    // Pemeriksaan tabrakan jadwal antrean untuk akun ini (buffer aman 60 menit)
+    // Hindari tabrakan dengan pos akun lain dengan toleransi jeda auto_stagger_minutes
     var collisionFound = true;
     var loops = 0;
-    while (collisionFound && loops < 12) {
+    while (collisionFound && loops < 30) {
       collisionFound = false;
       loops++;
       for (var p = 0; p < posts.length; p++) {
         var postItem = posts[p];
-        if (String(postItem.account_id) === String(accountId) && postItem.status === 'Scheduled' && postItem.scheduled_at) {
+        if (postItem.status === 'Scheduled' && postItem.scheduled_at) {
           var schedTime = new Date(postItem.scheduled_at).getTime();
           var diffMin = Math.abs(schedTime - candidateDate.getTime()) / (60 * 1000);
-          if (diffMin < 60) {
-            candidateDate.setMinutes(candidateDate.getMinutes() + 65);
+          if (diffMin < staggerMin) {
+            candidateDate.setMinutes(candidateDate.getMinutes() + staggerMin);
             collisionFound = true;
             break;
           }
@@ -1338,7 +1443,7 @@ function suggestBestPostingTime(accountId) {
       ok: true,
       data: {
         suggested_time: finalFormatted,
-        reason: 'Jendela ' + selectedWindow.name + ' (' + selectedWindow.start + '-' + selectedWindow.end + ') + jitter ' + jitter + ' mnt'
+        reason: 'Jendela @' + (acc ? acc.username : 'akun') + ' (' + wStart + '-' + wEnd + ') + jeda ' + staggerMin + ' mnt'
       }
     };
   } catch (err) {
@@ -1626,6 +1731,147 @@ function updateViralMetrics(viralId, viewsCount, originalPostedDate) {
       }
     }
     return { ok: false, message: 'Konten viral tidak ditemukan' };
+  } catch (err) {
+    return { ok: false, message: err.message };
+  }
+}
+
+/**
+ * CRUD & APPROVAL ENGINE: Draft Mode ACC
+ */
+function saveDraftAcc(draftData) {
+  try {
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Draft_Acc');
+    if (!sheet) {
+      setupDatabase();
+      sheet = ss.getSheetByName('Draft_Acc');
+    }
+
+    var nowIso = new Date().toISOString();
+    var draftId = draftData.draft_id ? String(draftData.draft_id).trim() : '';
+    var title = draftData.title ? String(draftData.title).trim() : 'Draf Konten Baru';
+    var productId = draftData.product_id ? String(draftData.product_id).trim() : '';
+    var viralId = draftData.viral_id ? String(draftData.viral_id).trim() : '';
+    var approvalStatus = draftData.approval_status || 'Pending';
+    var revisionNotes = draftData.revision_notes ? String(draftData.revision_notes).trim() : '';
+    var chainsJson = JSON.stringify(draftData.chains || []);
+
+    var values = sheet.getDataRange().getValues();
+    var headers = values[0];
+    var idCol = headers.indexOf('draft_id');
+    if (idCol === -1) idCol = 0;
+
+    if (draftId) {
+      for (var i = 1; i < values.length; i++) {
+        if (String(values[i][idCol]) === draftId) {
+          var rowIdx = i + 1;
+          var tCol = headers.indexOf('title') + 1;
+          var pCol = headers.indexOf('product_id') + 1;
+          var vCol = headers.indexOf('viral_id') + 1;
+          var cCol = headers.indexOf('chains_json') + 1;
+          var sCol = headers.indexOf('approval_status') + 1;
+          var rCol = headers.indexOf('revision_notes') + 1;
+          var uCol = headers.indexOf('updated_at') + 1;
+
+          if (tCol > 0) sheet.getRange(rowIdx, tCol).setValue(title);
+          if (pCol > 0) sheet.getRange(rowIdx, pCol).setValue(productId);
+          if (vCol > 0) sheet.getRange(rowIdx, vCol).setValue(viralId);
+          if (cCol > 0) sheet.getRange(rowIdx, cCol).setValue(chainsJson);
+          if (sCol > 0) sheet.getRange(rowIdx, sCol).setValue(approvalStatus);
+          if (rCol > 0) sheet.getRange(rowIdx, rCol).setValue(revisionNotes);
+          if (uCol > 0) sheet.getRange(rowIdx, uCol).setValue(nowIso);
+
+          return { ok: true, message: 'Draf ACC berhasil diperbarui.', draft_id: draftId };
+        }
+      }
+    }
+
+    var newDraftId = 'dacc_' + Utilities.getUuid().slice(0, 8);
+    var newRowObj = {
+      draft_id: newDraftId,
+      title: title,
+      product_id: productId,
+      viral_id: viralId,
+      chains_json: chainsJson,
+      approval_status: approvalStatus,
+      revision_notes: revisionNotes,
+      created_at: nowIso,
+      updated_at: nowIso
+    };
+
+    appendRowData('Draft_Acc', newRowObj);
+    return { ok: true, message: 'Draf ACC baru berhasil diajukan untuk peninjauan.', draft_id: newDraftId };
+  } catch (err) {
+    return { ok: false, message: 'Gagal menyimpan draf: ' + err.message };
+  }
+}
+
+function updateDraftApprovalStatus(draftId, status, revisionNotes) {
+  try {
+    if (!draftId) return { ok: false, message: 'ID Draf tidak valid.' };
+    var validStatuses = ['Pending', 'Approved', 'Rejected', 'Revision'];
+    if (validStatuses.indexOf(status) === -1) {
+      return { ok: false, message: 'Status persetujuan tidak valid.' };
+    }
+
+    var cleanNotes = revisionNotes ? String(revisionNotes).trim() : '';
+    if (status === 'Revision' && !cleanNotes) {
+      return { ok: false, message: 'Catatan revisi wajib diisi saat meminta revisi konten!' };
+    }
+
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Draft_Acc');
+    if (!sheet) return { ok: false, message: 'Tabel Draft_Acc tidak ditemukan.' };
+
+    var values = sheet.getDataRange().getValues();
+    var headers = values[0];
+    var idCol = headers.indexOf('draft_id');
+    var sCol = headers.indexOf('approval_status') + 1;
+    var rCol = headers.indexOf('revision_notes') + 1;
+    var uCol = headers.indexOf('updated_at') + 1;
+    if (idCol === -1) idCol = 0;
+
+    var nowIso = new Date().toISOString();
+
+    for (var i = 1; i < values.length; i++) {
+      if (String(values[i][idCol]) === String(draftId)) {
+        var row = i + 1;
+        if (sCol > 0) sheet.getRange(row, sCol).setValue(status);
+        if (rCol > 0) sheet.getRange(row, rCol).setValue(cleanNotes);
+        if (uCol > 0) sheet.getRange(row, uCol).setValue(nowIso);
+
+        var msg = 'Status draf diubah menjadi ' + status + '.';
+        if (status === 'Approved') msg = 'Draf berhasil disetujui (Approved)! Tim dapat segera menjadwalkannya.';
+        if (status === 'Revision') msg = 'Permintaan revisi berhasil dikirim ke tim pembuat konten.';
+        if (status === 'Rejected') msg = 'Draf konten telah ditolak (Rejected).';
+
+        return { ok: true, message: msg, data: { draft_id: draftId, approval_status: status, revision_notes: cleanNotes } };
+      }
+    }
+    return { ok: false, message: 'Draf tidak ditemukan di database.' };
+  } catch (err) {
+    return { ok: false, message: 'Gagal memperbarui status draf: ' + err.message };
+  }
+}
+
+function deleteDraftAcc(draftId) {
+  try {
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Draft_Acc');
+    if (!sheet) return { ok: false, message: 'Sheet Draft_Acc tidak ditemukan' };
+    var values = sheet.getDataRange().getValues();
+    var headers = values[0];
+    var idCol = headers.indexOf('draft_id');
+    if (idCol === -1) idCol = 0;
+
+    for (var i = 1; i < values.length; i++) {
+      if (String(values[i][idCol]) === String(draftId)) {
+        sheet.deleteRow(i + 1);
+        return { ok: true, message: 'Draf ACC berhasil dihapus.' };
+      }
+    }
+    return { ok: false, message: 'Draf tidak ditemukan.' };
   } catch (err) {
     return { ok: false, message: err.message };
   }

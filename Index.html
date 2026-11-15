@@ -111,9 +111,9 @@
         </button>
       </div>
 
-      <nav class="p-4 space-y-1.5 flex-1 overflow-y-auto">
+      <nav class="p-4 space-y-1 flex-1 overflow-y-auto">
         <!-- 1. Dashboard -->
-        <button @click="switchTab('dashboard')" :class="currentTab === 'dashboard' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+        <button @click="switchTab('dashboard')" :class="currentTab === 'dashboard' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
           <div class="flex items-center space-x-3">
             <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
             <span>Dashboard</span>
@@ -121,26 +121,37 @@
         </button>
 
         <!-- 2. Postingan & Sub-menu Composer -->
-        <div class="space-y-1">
-          <button @click="switchTab('all_posts')" :class="currentTab === 'all_posts' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+        <div class="space-y-0.5">
+          <button @click="switchTab('all_posts')" :class="currentTab === 'all_posts' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
             <div class="flex items-center space-x-3">
               <i data-lucide="layers" class="w-5 h-5"></i>
               <span>Postingan</span>
             </div>
-            <span class="px-2 py-0.5 text-xs rounded-full font-bold bg-indigo-500/10 text-indigo-600" x-text="manualPosts.length"></span>
+            <span class="px-2 py-0.5 text-xs rounded-full font-bold bg-indigo-500/10 text-indigo-600" x-text="pipelinePostsCount"></span>
           </button>
 
           <!-- Sub-menu Composer Utas -->
-          <button @click="switchTab('composer')" :class="currentTab === 'composer' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-500 hover:bg-slate-50'" class="w-full flex items-center justify-between pl-9 pr-3.5 py-2 rounded-xl text-xs transition">
+          <button @click="switchTab('composer')" :class="currentTab === 'composer' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-500 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between pl-9 pr-3.5 py-2 rounded-xl text-xs transition">
             <div class="flex items-center space-x-2.5">
-              <i data-lucide="edit-3" class="w-5 h-5 text-brand-500"></i>
+              <i data-lucide="edit-3" class="w-4 h-4 text-brand-500"></i>
               <span>Composer Utas</span>
             </div>
             <span class="text-[10px] bg-brand-100 text-brand-700 px-1.5 py-0.2 rounded font-medium">Dual-Mode</span>
           </button>
 
+          <!-- Modul Draft Mode ACC -->
+          <button @click="switchTab('draft_acc')" :class="currentTab === 'draft_acc' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+            <div class="flex items-center space-x-3">
+              <i data-lucide="clipboard-check" class="w-5 h-5 text-indigo-600"></i>
+              <span>Draft Mode ACC</span>
+            </div>
+            <template x-if="pendingDraftAccCount > 0">
+              <span class="px-2 py-0.5 text-xs rounded-full font-bold bg-amber-500/10 text-amber-600" x-text="pendingDraftAccCount"></span>
+            </template>
+          </button>
+
           <!-- Menu Inbox Komentar Mobile -->
-          <button @click="switchTab('inbox_comments')" :class="currentTab === 'inbox_comments' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+          <button @click="switchTab('inbox_comments')" :class="currentTab === 'inbox_comments' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
             <div class="flex items-center space-x-3">
               <i data-lucide="message-square" class="w-5 h-5 text-brand-600"></i>
               <span>Inbox Komentar</span>
@@ -152,11 +163,11 @@
         </div>
 
         <!-- 3. Pembatas: Kelompok Konten & Katalog -->
-        <div class="pt-2 pb-1 border-t border-slate-100">
+        <div class="pt-3 pb-1 border-t border-slate-100">
           <span class="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Katalog & Ide Konten</span>
         </div>
 
-        <button @click="switchTab('daily_queue')" :class="currentTab === 'daily_queue' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+        <button @click="switchTab('daily_queue')" :class="currentTab === 'daily_queue' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
           <div class="flex items-center space-x-3">
             <i data-lucide="calendar-clock" class="w-5 h-5 text-amber-500"></i>
             <span>Antrean Hari Ini</span>
@@ -164,7 +175,7 @@
           <span class="px-2 py-0.5 text-xs rounded-full font-bold bg-amber-500/10 text-amber-600" x-text="unpostedProductsCount"></span>
         </button>
 
-        <button @click="switchTab('products')" :class="currentTab === 'products' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+        <button @click="switchTab('products')" :class="currentTab === 'products' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
           <div class="flex items-center space-x-3">
             <i data-lucide="package" class="w-5 h-5"></i>
             <span>Katalog Produk</span>
@@ -172,7 +183,7 @@
           <span class="px-2 py-0.5 text-xs rounded-full font-bold bg-brand-500/10 text-brand-600" x-text="products.length"></span>
         </button>
 
-        <button @click="switchTab('viral_library')" :class="currentTab === 'viral_library' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+        <button @click="switchTab('viral_library')" :class="currentTab === 'viral_library' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
           <div class="flex items-center space-x-3">
             <i data-lucide="flame" class="w-5 h-5 text-amber-500"></i>
             <span>Bank Ide Viral</span>
@@ -181,11 +192,11 @@
         </button>
 
         <!-- 5. Pembatas: Master Armada & Setelan -->
-        <div class="pt-2 pb-1 border-t border-slate-100">
+        <div class="pt-3 pb-1 border-t border-slate-100">
           <span class="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Armada & Konfigurasi</span>
         </div>
 
-        <button @click="switchTab('accounts')" :class="currentTab === 'accounts' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+        <button @click="switchTab('accounts')" :class="currentTab === 'accounts' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
           <div class="flex items-center space-x-3">
             <i data-lucide="users" class="w-5 h-5"></i>
             <span>Armada Akun</span>
@@ -193,7 +204,7 @@
           <span class="px-2 py-0.5 text-xs rounded-full font-bold bg-accent-500/10 text-accent-600" x-text="accounts.length"></span>
         </button>
 
-        <button @click="switchTab('settings')" :class="currentTab === 'settings' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+        <button @click="switchTab('settings')" :class="currentTab === 'settings' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
           <div class="flex items-center space-x-3">
             <i data-lucide="sliders" class="w-5 h-5"></i>
             <span>Pengaturan</span>
@@ -221,7 +232,7 @@
 
         <nav class="p-4 space-y-1">
           <!-- 1. Dashboard -->
-          <button @click="switchTab('dashboard')" :class="currentTab === 'dashboard' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+          <button @click="switchTab('dashboard')" :class="currentTab === 'dashboard' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
             <div class="flex items-center space-x-3">
               <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
               <span>Dashboard</span>
@@ -230,25 +241,36 @@
 
           <!-- 2. Postingan & Sub-Menu Composer -->
           <div class="space-y-0.5">
-            <button @click="switchTab('all_posts')" :class="currentTab === 'all_posts' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+            <button @click="switchTab('all_posts')" :class="currentTab === 'all_posts' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
               <div class="flex items-center space-x-3">
                 <i data-lucide="layers" class="w-5 h-5"></i>
                 <span>Postingan</span>
               </div>
-              <span class="px-2 py-0.5 text-xs rounded-full font-bold bg-indigo-500/10 text-indigo-600" x-text="manualPosts.length"></span>
+              <span class="px-2 py-0.5 text-xs rounded-full font-bold bg-indigo-500/10 text-indigo-600" x-text="pipelinePostsCount"></span>
             </button>
 
             <!-- Sub-menu: Composer Utas -->
-            <button @click="switchTab('composer')" :class="currentTab === 'composer' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-500 hover:bg-slate-50'" class="w-full flex items-center justify-between pl-8 pr-3 py-2 rounded-xl text-xs transition">
-              <div class="flex items-center space-x-2">
-                <i data-lucide="edit-3" class="w-5 h-5 text-brand-500"></i>
+            <button @click="switchTab('composer')" :class="currentTab === 'composer' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-500 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between pl-9 pr-3.5 py-2 rounded-xl text-xs transition">
+              <div class="flex items-center space-x-2.5">
+                <i data-lucide="edit-3" class="w-4 h-4 text-brand-500"></i>
                 <span>Composer Utas</span>
               </div>
-              <span class="text-[9px] bg-brand-100 text-brand-700 px-1.5 py-0.2 rounded font-medium">Dual-Mode</span>
+              <span class="text-[10px] bg-brand-100 text-brand-700 px-1.5 py-0.2 rounded font-medium">Dual-Mode</span>
+            </button>
+
+            <!-- Modul Draft Mode ACC (Desktop) -->
+            <button @click="switchTab('draft_acc')" :class="currentTab === 'draft_acc' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+              <div class="flex items-center space-x-3">
+                <i data-lucide="clipboard-check" class="w-5 h-5 text-indigo-600"></i>
+                <span>Draft Mode ACC</span>
+              </div>
+              <template x-if="pendingDraftAccCount > 0">
+                <span class="px-2 py-0.5 text-xs rounded-full font-bold bg-amber-500/10 text-amber-600" x-text="pendingDraftAccCount"></span>
+              </template>
             </button>
 
             <!-- Menu Inbox Komentar Desktop -->
-            <button @click="switchTab('inbox_comments')" :class="currentTab === 'inbox_comments' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+            <button @click="switchTab('inbox_comments')" :class="currentTab === 'inbox_comments' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
               <div class="flex items-center space-x-3">
                 <i data-lucide="message-square" class="w-5 h-5 text-brand-600"></i>
                 <span>Inbox Komentar</span>
@@ -260,48 +282,48 @@
           </div>
 
           <!-- 3. Pembatas: Kelompok Konten & Katalog -->
-          <div class="pt-2 pb-1 border-t border-slate-100">
+          <div class="pt-3 pb-1 border-t border-slate-100">
             <span class="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Katalog & Ide Konten</span>
           </div>
 
-          <button @click="switchTab('daily_queue')" :class="currentTab === 'daily_queue' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'" class="w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs transition">
-            <div class="flex items-center space-x-2.5">
+          <button @click="switchTab('daily_queue')" :class="currentTab === 'daily_queue' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+            <div class="flex items-center space-x-3">
               <i data-lucide="calendar-clock" class="w-5 h-5 text-amber-500"></i>
               <span>Antrean Hari Ini</span>
             </div>
-            <span class="px-1.5 py-0.2 text-[10px] rounded-full font-bold bg-amber-500/10 text-amber-600" x-text="unpostedProductsCount"></span>
+            <span class="px-2 py-0.5 text-xs rounded-full font-bold bg-amber-500/10 text-amber-600" x-text="unpostedProductsCount"></span>
           </button>
 
-          <button @click="switchTab('products')" :class="currentTab === 'products' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'" class="w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs transition">
-            <div class="flex items-center space-x-2.5">
+          <button @click="switchTab('products')" :class="currentTab === 'products' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+            <div class="flex items-center space-x-3">
               <i data-lucide="package" class="w-5 h-5"></i>
               <span>Katalog Produk</span>
             </div>
-            <span class="px-1.5 py-0.2 text-[10px] rounded-full font-bold bg-brand-500/10 text-brand-600" x-text="products.length"></span>
+            <span class="px-2 py-0.5 text-xs rounded-full font-bold bg-brand-500/10 text-brand-600" x-text="products.length"></span>
           </button>
 
-          <button @click="switchTab('viral_library')" :class="currentTab === 'viral_library' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'" class="w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs transition">
-            <div class="flex items-center space-x-2.5">
+          <button @click="switchTab('viral_library')" :class="currentTab === 'viral_library' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+            <div class="flex items-center space-x-3">
               <i data-lucide="flame" class="w-5 h-5 text-amber-500"></i>
               <span>Bank Ide</span>
             </div>
-            <span class="px-1.5 py-0.2 text-[10px] rounded-full font-bold bg-amber-500/10 text-amber-600" x-text="viralLibrary.length"></span>
+            <span class="px-2 py-0.5 text-xs rounded-full font-bold bg-amber-500/10 text-amber-600" x-text="viralLibrary.length"></span>
           </button>
 
           <!-- 5. Pembatas: Master Armada & Setelan -->
-          <div class="pt-2 pb-1 border-t border-slate-100">
+          <div class="pt-3 pb-1 border-t border-slate-100">
             <span class="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Armada & Konfigurasi</span>
           </div>
 
-          <button @click="switchTab('accounts')" :class="currentTab === 'accounts' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'" class="w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs transition">
-            <div class="flex items-center space-x-2.5">
+          <button @click="switchTab('accounts')" :class="currentTab === 'accounts' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+            <div class="flex items-center space-x-3">
               <i data-lucide="users" class="w-5 h-5"></i>
               <span>Armada Akun</span>
             </div>
-            <span class="px-1.5 py-0.2 text-[10px] rounded-full font-bold bg-accent-500/10 text-accent-600" x-text="accounts.length"></span>
+            <span class="px-2 py-0.5 text-xs rounded-full font-bold bg-accent-500/10 text-accent-600" x-text="accounts.length"></span>
           </button>
 
-          <button @click="switchTab('settings')" :class="currentTab === 'settings' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
+          <button @click="switchTab('settings')" :class="currentTab === 'settings' ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-slate-600 hover:bg-slate-50 font-medium'" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition">
             <div class="flex items-center space-x-3">
               <i data-lucide="sliders" class="w-5 h-5"></i>
               <span>Pengaturan</span>
@@ -553,103 +575,107 @@
 
           <!-- TAB BARU: SEMUA POSTINGAN (KONTROL TERPUSAT & FILTER TAB STATUS) -->
           <div x-show="currentTab === 'all_posts'" class="space-y-4">
-            <!-- Toolbar Aksi & Filter Status Terpadu -->
-            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-200 pb-3">
-              <!-- Filter Status Tabs, Date Range, & Sorting -->
-              <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <button @click="postStatusFilter = 'all'" :class="postStatusFilter === 'all' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
+            <!-- Toolbar Aksi & Filter Status Bersih Tanpa Scrollbar Kaku -->
+            <div class="bg-surface p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+              <!-- Filter Status Chips Rapi (Auto-Wrap Bebas Scrollbar Horisontal) -->
+              <div class="flex flex-wrap items-center gap-1.5">
+                <button @click="postStatusFilter = 'all'" :class="postStatusFilter === 'all' ? 'bg-brand-600 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
                   <span>Semua</span> (<span x-text="getPostStatusCount('all')"></span>)
                 </button>
-                <button @click="postStatusFilter = 'Waiting Views'" :class="postStatusFilter === 'Waiting Views' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
+                <button @click="postStatusFilter = 'Waiting Views'" :class="postStatusFilter === 'Waiting Views' ? 'bg-brand-600 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
                   <span>Waiting Views</span> (<span x-text="getPostStatusCount('Waiting Views')"></span>)
                 </button>
-                <button @click="postStatusFilter = 'Scheduled'" :class="postStatusFilter === 'Scheduled' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
+                <button @click="postStatusFilter = 'Scheduled'" :class="postStatusFilter === 'Scheduled' ? 'bg-brand-600 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
                   <span>Terjadwal</span> (<span x-text="getPostStatusCount('Scheduled')"></span>)
                 </button>
-                <button @click="postStatusFilter = 'Published'" :class="postStatusFilter === 'Published' ? 'bg-emerald-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
+                <button @click="postStatusFilter = 'Published'" :class="postStatusFilter === 'Published' ? 'bg-emerald-600 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
                   <span>Terbit</span> (<span x-text="getPostStatusCount('Published')"></span>)
                 </button>
-                <button @click="postStatusFilter = 'Draft'" :class="postStatusFilter === 'Draft' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
+                <button @click="postStatusFilter = 'Draft'" :class="postStatusFilter === 'Draft' ? 'bg-amber-500 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
                   <span>Draft</span> (<span x-text="getPostStatusCount('Draft')"></span>)
                 </button>
-                <button @click="postStatusFilter = 'Failed'" :class="postStatusFilter === 'Failed' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-3 py-1.5 rounded-xl text-xs transition border border-slate-200">
+                <button @click="postStatusFilter = 'Failed'" :class="postStatusFilter === 'Failed' ? 'bg-rose-600 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
                   <span>Gagal</span> (<span x-text="getPostStatusCount('Failed')"></span>)
                 </button>
+              </div>
 
-                <div class="h-4 w-px bg-slate-200 mx-0.5 hidden sm:block"></div>
-
-                <!-- Dropdown Filter Akun (Avatar, Kategori, Username) -->
-                <div class="relative" @click.outside="postAccountDropdownOpen = false">
-                  <button type="button" @click="postAccountDropdownOpen = !postAccountDropdownOpen" class="text-xs py-1.5 px-2.5 rounded-xl border border-slate-200 bg-surface hover:bg-slate-50 flex items-center space-x-1.5 transition">
-                    <template x-if="!postAccountFilter">
-                      <div class="flex items-center space-x-1.5 text-slate-600">
-                        <i data-lucide="users" class="w-3.5 h-3.5 text-slate-400"></i>
-                        <span class="font-medium">Semua Akun</span>
-                      </div>
-                    </template>
-                    <template x-if="postAccountFilter && getAccount(postAccountFilter).account_id">
-                      <div class="flex items-center space-x-1.5">
-                        <img :src="getAccount(postAccountFilter).profile_picture_url || 'https://via.placeholder.com/20'" class="w-4 h-4 rounded-full border border-slate-200 shrink-0 object-cover">
-                        <span class="font-bold text-slate-800" x-text="'@' + getAccount(postAccountFilter).username"></span>
-                        <span class="text-[9px] px-1 py-0.2 rounded bg-indigo-50 text-indigo-700 font-semibold hidden sm:inline" x-text="getAccount(postAccountFilter).category || 'General'"></span>
-                      </div>
-                    </template>
-                    <i data-lucide="chevron-down" class="w-3 h-3 text-slate-400"></i>
-                  </button>
-
-                  <div x-show="postAccountDropdownOpen" x-cloak class="absolute left-0 top-full mt-1.5 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 z-30 max-h-60 overflow-y-auto space-y-1">
-                    <div @click="postAccountFilter = ''; postAccountDropdownOpen = false;" class="p-2 rounded-xl text-xs cursor-pointer hover:bg-slate-50 flex items-center space-x-2" :class="!postAccountFilter ? 'bg-brand-50 text-brand-700 font-bold' : 'text-slate-600'">
-                      <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
-                      <span>Semua Akun Threads</span>
-                    </div>
-                    <template x-for="acc in accounts" :key="'post-filter-acc-'+acc.account_id">
-                      <div @click="postAccountFilter = acc.account_id; postAccountDropdownOpen = false;" class="p-2 rounded-xl text-xs cursor-pointer hover:bg-slate-50 flex items-center justify-between transition" :class="postAccountFilter === acc.account_id ? 'bg-brand-50 text-brand-700 font-bold' : 'text-slate-700'">
-                        <div class="flex items-center space-x-2 min-w-0">
-                          <img :src="acc.profile_picture_url || 'https://via.placeholder.com/32'" class="w-6 h-6 rounded-full border border-slate-200 shrink-0 object-cover">
-                          <div class="min-w-0">
-                            <span class="block truncate font-bold text-slate-900" x-text="'@' + acc.username"></span>
-                            <span class="block truncate text-[10px] text-slate-400" x-text="acc.name || acc.username"></span>
+              <!-- Filter Dropdowns Grid 2-Kolom & Tombol Aksi -->
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
+                <!-- Dropdown Baris Bersih: Grid 2-Kolom di Layar Seluler -->
+                <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 flex-1">
+                  <!-- Dropdown Filter Akun -->
+                  <div class="relative col-span-2 sm:col-span-1" @click.outside="postAccountDropdownOpen = false">
+                    <button type="button" @click="postAccountDropdownOpen = !postAccountDropdownOpen" class="w-full text-xs py-2 px-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-white flex items-center justify-between space-x-2 transition">
+                      <div class="flex items-center space-x-2 truncate">
+                        <template x-if="!postAccountFilter">
+                          <div class="flex items-center space-x-1.5 text-slate-600">
+                            <i data-lucide="users" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+                            <span class="font-medium truncate">Semua Akun</span>
                           </div>
-                        </div>
-                        <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 shrink-0 font-medium" x-text="acc.category || 'General'"></span>
+                        </template>
+                        <template x-if="postAccountFilter && getAccount(postAccountFilter).account_id">
+                          <div class="flex items-center space-x-1.5 truncate">
+                            <img :src="getAccount(postAccountFilter).profile_picture_url || 'https://via.placeholder.com/20'" class="w-4 h-4 rounded-full border border-slate-200 shrink-0 object-cover">
+                            <span class="font-bold text-slate-800 truncate" x-text="'@' + getAccount(postAccountFilter).username"></span>
+                          </div>
+                        </template>
                       </div>
-                    </template>
+                      <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+                    </button>
+
+                    <div x-show="postAccountDropdownOpen" x-cloak class="absolute left-0 top-full mt-1.5 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 z-30 max-h-60 overflow-y-auto space-y-1">
+                      <div @click="postAccountFilter = ''; postAccountDropdownOpen = false;" class="p-2 rounded-xl text-xs cursor-pointer hover:bg-slate-50 flex items-center space-x-2" :class="!postAccountFilter ? 'bg-brand-50 text-brand-700 font-bold' : 'text-slate-600'">
+                        <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+                        <span>Semua Akun Threads</span>
+                      </div>
+                      <template x-for="acc in accounts" :key="'post-filter-acc-'+acc.account_id">
+                        <div @click="postAccountFilter = acc.account_id; postAccountDropdownOpen = false;" class="p-2 rounded-xl text-xs cursor-pointer hover:bg-slate-50 flex items-center justify-between transition" :class="postAccountFilter === acc.account_id ? 'bg-brand-50 text-brand-700 font-bold' : 'text-slate-700'">
+                          <div class="flex items-center space-x-2 min-w-0">
+                            <img :src="acc.profile_picture_url || 'https://via.placeholder.com/32'" class="w-6 h-6 rounded-full border border-slate-200 shrink-0 object-cover">
+                            <div class="min-w-0">
+                              <span class="block truncate font-bold text-slate-900" x-text="'@' + acc.username"></span>
+                              <span class="block truncate text-[10px] text-slate-400" x-text="acc.name || acc.username"></span>
+                            </div>
+                          </div>
+                          <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 shrink-0 font-medium" x-text="acc.category || 'General'"></span>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+
+                  <!-- Dropdown Filter Rentang Tanggal -->
+                  <div class="col-span-1">
+                    <select x-model="postDateRangeFilter" class="w-full text-xs py-2 px-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white font-medium text-slate-700 focus:outline-none">
+                      <option value="today">Hari Ini</option>
+                      <option value="yesterday">Kemarin</option>
+                      <option value="last_3_days">3 Hari Terakhir</option>
+                      <option value="last_7_days">7 Hari Terakhir</option>
+                      <option value="this_month">Bulan Ini</option>
+                      <option value="all">Semua Waktu</option>
+                    </select>
+                  </div>
+
+                  <!-- Dropdown Sorting -->
+                  <div class="col-span-1">
+                    <select x-model="postSortOrder" class="w-full text-xs py-2 px-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white font-medium text-slate-700 focus:outline-none">
+                      <option value="newest">Terbaru</option>
+                      <option value="views_desc">Views Banyak</option>
+                      <option value="scheduled">Jadwal Rilis</option>
+                    </select>
                   </div>
                 </div>
 
-                <!-- Dropdown Filter Rentang Tanggal -->
-                <div class="flex items-center space-x-1.5">
-                  <select x-model="postDateRangeFilter" class="text-xs py-1.5 px-2.5 rounded-xl border border-slate-200 bg-surface font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20">
-                    <option value="today">Hari Ini</option>
-                    <option value="yesterday">Kemarin</option>
-                    <option value="last_3_days">3 Hari Terakhir</option>
-                    <option value="last_7_days">7 Hari Terakhir</option>
-                    <option value="this_month">Bulan Ini</option>
-                    <option value="last_month">Bulan Lalu</option>
-                    <option value="all">Semua Waktu</option>
-                  </select>
+                <!-- Tombol Aksi Utama Berbobot Jelas -->
+                <div class="flex items-center justify-end space-x-2 shrink-0 pt-1 sm:pt-0">
+                  <button @click="manualSyncInsights()" :disabled="syncingInsights" class="px-3 py-2 bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 border border-slate-200 text-xs font-semibold rounded-xl flex items-center space-x-1.5 transition disabled:opacity-50" title="Sinkronisasi Metrik Organik">
+                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-emerald-600" :class="syncingInsights ? 'animate-spin' : ''"></i>
+                    <span class="text-xs" x-text="syncingInsights ? '...' : 'Sinkron'"></span>
+                  </button>
+                  <button @click="openComposerModal()" class="flex-1 sm:flex-initial px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl flex items-center justify-center space-x-1.5 shadow-md shadow-brand-500/20 transition active:scale-95">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>Buat Utas Baru</span>
+                  </button>
                 </div>
-
-                <!-- Dropdown Sorting -->
-                <div class="flex items-center space-x-1.5">
-                  <select x-model="postSortOrder" class="text-xs py-1.5 px-2.5 rounded-xl border border-slate-200 bg-surface font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/20">
-                    <option value="newest">Aktivitas Terbaru</option>
-                    <option value="views_desc">Views Terbanyak</option>
-                    <option value="scheduled">Jadwal Peluncuran</option>
-                  </select>
-                </div>
-              </div>
-
-              <!-- Tombol Aksi Sejajar -->
-              <div class="flex items-center space-x-2 shrink-0">
-                <button @click="manualSyncInsights()" :disabled="syncingInsights" class="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-xl flex items-center space-x-1.5 shadow-2xs transition disabled:opacity-50">
-                  <i data-lucide="refresh-cw" class="w-3.5 h-3.5" :class="syncingInsights ? 'animate-spin' : ''"></i>
-                  <span x-text="syncingInsights ? 'Menyinkronkan...' : 'Sinkronisasi Metrik'"></span>
-                </button>
-                <button @click="openComposerModal()" class="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-xl flex items-center space-x-1.5 shadow-2xs transition">
-                  <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
-                  <span>Buat Utas Baru</span>
-                </button>
               </div>
             </div>
 
@@ -710,24 +736,37 @@
                       </template>
                     </div>
 
-                    <!-- Info Tag: Produk & Rantai -->
-                    <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
-                      <span class="inline-flex items-center space-x-1 px-2.5 py-1 bg-slate-100 rounded-full font-semibold text-slate-700">
-                        <i data-lucide="link" class="w-3 h-3 text-slate-500"></i>
-                        <span x-text="getPostChains(post.post_id).length + ' Chains'"></span>
-                      </span>
-
-                      <template x-if="post.product_id">
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100 truncate max-w-[180px]">
-                          <span class="truncate" x-text="getProduct(post.product_id).title"></span>
+                    <!-- Micro-Card Produk & Info Rantai (Anti Terpotong) -->
+                    <div class="space-y-2">
+                      <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
+                        <span class="inline-flex items-center space-x-1 px-2.5 py-0.5 bg-slate-100 rounded-full font-semibold text-slate-700">
+                          <i data-lucide="link" class="w-3 h-3 text-slate-500"></i>
+                          <span x-text="getPostChains(post.post_id).length + ' Utas'"></span>
                         </span>
-                      </template>
 
-                      <template x-if="post.status === 'Scheduled' && post.scheduled_at">
-                        <span class="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-100">
-                          <i data-lucide="clock" class="w-3 h-3"></i>
-                          <span x-text="getCountdownText(post.scheduled_at)"></span>
-                        </span>
+                        <template x-if="post.status === 'Scheduled' && post.scheduled_at">
+                          <span class="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-100">
+                            <i data-lucide="clock" class="w-3 h-3"></i>
+                            <span x-text="getCountdownText(post.scheduled_at)"></span>
+                          </span>
+                        </template>
+                      </div>
+
+                      <template x-if="post.product_id && getProduct(post.product_id).product_id">
+                        <div class="p-2 bg-slate-50 rounded-xl border border-slate-200/70 flex items-center justify-between gap-2">
+                          <div class="flex items-center space-x-2 min-w-0 flex-1">
+                            <img :src="getProduct(post.product_id).cover_url || getFirstProductMediaUrl(post.product_id) || 'https://via.placeholder.com/32'" class="w-7 h-7 rounded-lg object-cover border border-slate-200 shrink-0">
+                            <div class="min-w-0 flex-1">
+                              <span class="block text-[11px] font-bold text-slate-800 truncate" x-text="getProduct(post.product_id).title"></span>
+                              <span class="text-[9px] text-emerald-600 font-semibold" x-text="formatRupiah(getProduct(post.product_id).price) + ' • Komisi ' + getProduct(post.product_id).commission_pct + '%'"></span>
+                            </div>
+                          </div>
+                          <template x-if="getProduct(post.product_id).affiliate_link">
+                            <a :href="getProduct(post.product_id).affiliate_link" target="_blank" @click.stop class="p-1 text-slate-400 hover:text-brand-600 transition shrink-0" title="Buka Link Affiliate">
+                              <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                            </a>
+                          </template>
+                        </div>
                       </template>
                     </div>
 
@@ -744,60 +783,80 @@
                       </div>
                     </template>
 
-                    <!-- Live Metrics Strip -->
-                    <div class="flex items-center justify-between text-slate-600 text-xs px-1">
-                      <div>
-                        <div class="flex items-center space-x-3">
-                          <span class="flex items-center space-x-1" title="Views"><i data-lucide="eye" class="w-3.5 h-3.5 text-slate-400"></i><span class="font-semibold" x-text="getPostMetric(post.post_id, 'views')"></span></span>
-                          <span class="flex items-center space-x-1" title="Likes"><i data-lucide="heart" class="w-3.5 h-3.5 text-rose-400"></i><span class="font-semibold" x-text="getPostMetric(post.post_id, 'likes')"></span></span>
-                          <span class="flex items-center space-x-1" title="Reposts"><i data-lucide="repeat" class="w-3.5 h-3.5 text-emerald-400"></i><span class="font-semibold" x-text="getPostMetric(post.post_id, 'reposts')"></span></span>
-                          <span class="flex items-center space-x-1" title="Komentar"><i data-lucide="message-circle" class="w-3.5 h-3.5 text-sky-500"></i><span class="font-semibold" x-text="getPostMetric(post.post_id, 'replies')"></span></span>
+                    <!-- Live Metrics Strip (Hanya untuk pos Live/Published) -->
+                    <template x-if="post.status === 'Published' || post.status === 'Waiting Views'">
+                      <div class="flex items-center justify-between text-slate-600 text-xs px-1">
+                        <div>
+                          <div class="flex items-center space-x-3">
+                            <span class="flex items-center space-x-1" title="Views"><i data-lucide="eye" class="w-3.5 h-3.5 text-slate-400"></i><span class="font-semibold" x-text="getPostMetric(post.post_id, 'views')"></span></span>
+                            <span class="flex items-center space-x-1" title="Likes"><i data-lucide="heart" class="w-3.5 h-3.5 text-rose-400"></i><span class="font-semibold" x-text="getPostMetric(post.post_id, 'likes')"></span></span>
+                            <span class="flex items-center space-x-1" title="Reposts"><i data-lucide="repeat" class="w-3.5 h-3.5 text-emerald-400"></i><span class="font-semibold" x-text="getPostMetric(post.post_id, 'reposts')"></span></span>
+                            <span class="flex items-center space-x-1" title="Komentar"><i data-lucide="message-circle" class="w-3.5 h-3.5 text-sky-500"></i><span class="font-semibold" x-text="getPostMetric(post.post_id, 'replies')"></span></span>
+                          </div>
+                          <div class="text-[10px] text-slate-400 flex items-center space-x-1 mt-0.5">
+                            <i data-lucide="clock" class="w-2.5 h-2.5 text-slate-400 shrink-0"></i>
+                            <span x-text="getPostLastSynced(post.post_id) ? ('Sinkron ' + getPostLastSynced(post.post_id)) : 'Belum sinkron'"></span>
+                          </div>
                         </div>
-                        <div class="text-[10px] text-slate-400 flex items-center space-x-1 mt-0.5">
-                          <i data-lucide="clock" class="w-2.5 h-2.5 text-slate-400 shrink-0"></i>
-                          <span x-text="getPostLastSynced(post.post_id) ? ('Sinkron ' + getPostLastSynced(post.post_id)) : 'Belum sinkron'"></span>
-                        </div>
-                      </div>
-                      <button @click="openPostDetail(post)" class="text-[11px] font-bold text-brand-600 hover:underline flex items-center space-x-0.5">
-                        <span>Detail Utas</span>
-                        <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
-                      </button>
-                    </div>
-
-                    <!-- Tombol Aksi Jempol Ramah Sentuh (Mobile Action Row) -->
-                    <div class="pt-2 border-t border-slate-100">
-                      <div class="grid grid-cols-5 gap-2">
-                        <button @click="syncSinglePost(post.post_id)" :disabled="syncingPostIds.indexOf(post.post_id) !== -1" class="min-h-[40px] flex items-center justify-center bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold rounded-xl" title="Sinkronkan Metrik">
-                          <i data-lucide="refresh-cw" class="w-4 h-4" :class="syncingPostIds.indexOf(post.post_id) !== -1 ? 'animate-spin' : ''"></i>
-                        </button>
-
-                        <button @click="openPostDetail(post)" class="min-h-[40px] flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl" title="Detail">
-                          <i data-lucide="eye" class="w-4 h-4"></i>
-                        </button>
-
-                        <!-- Tombol Terbitkan Sekarang Hanya Jika Utas #1 Belum Terbit -->
-                        <template x-if="!isRootChainPublished(post)">
-                          <button @click="publishPostDirectly(post.post_id)" class="min-h-[40px] flex items-center justify-center bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold rounded-xl" title="Terbitkan Sekarang">
-                            <i data-lucide="send" class="w-4 h-4"></i>
-                          </button>
-                        </template>
-
-                        <!-- Proteksi Edit: Dikunci jika Utas sudah terbit -->
-                        <template x-if="!isPostLocked(post)">
-                          <button @click="editPost(post)" class="min-h-[40px] flex items-center justify-center bg-indigo-50 text-brand-700 hover:bg-indigo-100 text-xs font-semibold rounded-xl" title="Edit Post">
-                            <i data-lucide="pencil" class="w-4 h-4"></i>
-                          </button>
-                        </template>
-                        <template x-if="isPostLocked(post)">
-                          <button disabled class="min-h-[40px] flex items-center justify-center bg-slate-100 text-slate-300 cursor-not-allowed text-xs font-semibold rounded-xl" title="Terkunci: Postingan sudah terbit">
-                            <i data-lucide="lock" class="w-4 h-4"></i>
-                          </button>
-                        </template>
-
-                        <button @click="recyclePostIntoComposer(post)" class="min-h-[40px] flex items-center justify-center bg-pink-50 text-accent-600 hover:bg-pink-100 text-xs font-semibold rounded-xl" title="Kloning">
-                          <i data-lucide="repeat" class="w-4 h-4"></i>
+                        <button @click="openPostDetail(post)" class="text-[11px] font-bold text-brand-600 hover:underline flex items-center space-x-0.5">
+                          <span>Detail Utas</span>
+                          <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
                         </button>
                       </div>
+                    </template>
+
+                    <!-- Tombol Aksi Cepat Ramah Sentuh (Contextual Mobile Action Bar) -->
+                    <div class="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                      <!-- Status Khusus Draft: Tombol Lanjut Edit Primer -->
+                      <template x-if="post.status === 'Draft'">
+                        <div class="flex items-center justify-between w-full gap-2">
+                          <button @click="promptDeletePost(post.post_id)" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition" title="Hapus Draf">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                          </button>
+                          <div class="flex items-center space-x-2">
+                            <button @click="openPostDetail(post)" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition">
+                              Pratinjau
+                            </button>
+                            <button @click="editPost(post)" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl shadow-sm flex items-center space-x-1.5 transition">
+                              <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                              <span>Lanjut Edit / Jadwalkan</span>
+                            </button>
+                          </div>
+                        </div>
+                      </template>
+
+                      <!-- Status Non-Draft (Scheduled, Waiting Views, Published, Failed) -->
+                      <template x-if="post.status !== 'Draft'">
+                        <div class="flex items-center justify-between w-full gap-2">
+                          <div class="flex items-center space-x-1.5">
+                            <button @click="openPostDetail(post)" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl" title="Buka Detail">
+                              <i data-lucide="eye" class="w-4 h-4"></i>
+                            </button>
+                            <button @click="recyclePostIntoComposer(post)" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl" title="Kloning ke Composer">
+                              <i data-lucide="repeat" class="w-4 h-4"></i>
+                            </button>
+                            <button @click="syncSinglePost(post.post_id)" :disabled="syncingPostIds.indexOf(post.post_id) !== -1" class="p-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold rounded-xl" title="Sinkronkan Metrik">
+                              <i data-lucide="refresh-cw" class="w-4 h-4" :class="syncingPostIds.indexOf(post.post_id) !== -1 ? 'animate-spin' : ''"></i>
+                            </button>
+                          </div>
+
+                          <div class="flex items-center space-x-1.5">
+                            <template x-if="!isRootChainPublished(post)">
+                              <button @click="publishPostDirectly(post.post_id)" class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-xl flex items-center space-x-1 transition" title="Terbitkan Sekarang">
+                                <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                                <span>Rilis</span>
+                              </button>
+                            </template>
+
+                            <template x-if="!isPostLocked(post)">
+                              <button @click="editPost(post)" class="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-brand-700 border border-brand-200 text-xs font-bold rounded-xl flex items-center space-x-1 transition" title="Edit Jadwal">
+                                <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                                <span>Edit</span>
+                              </button>
+                            </template>
+                          </div>
+                        </div>
+                      </template>
                     </div>
                   </div>
                 </template>
@@ -1374,6 +1433,7 @@
                     <tr class="bg-slate-50/75 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-semibold">
                       <th class="py-3.5 px-4">Akun Threads</th>
                       <th class="py-3.5 px-4">Kategori Niche</th>
+                      <th class="py-3.5 px-4">Jam Jendela Posting</th>
                       <th class="py-3.5 px-4">Status Token</th>
                       <th class="py-3.5 px-4">Kadaluarsa Token</th>
                       <th class="py-3.5 px-4">Persona Tone AI</th>
@@ -1400,6 +1460,14 @@
                         <!-- Kategori Niche -->
                         <td class="py-3 px-4 whitespace-nowrap">
                           <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100" x-text="acc.category || 'General'"></span>
+                        </td>
+
+                        <!-- Jam Jendela Khusus Akun -->
+                        <td class="py-3 px-4 whitespace-nowrap">
+                          <span class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                            <i data-lucide="clock" class="w-3.5 h-3.5 text-amber-600"></i>
+                            <span x-text="formatAccountWindow(acc)"></span>
+                          </span>
                         </td>
 
                         <!-- Status Token (Hijau Aktif / Merah Expired) -->
@@ -1846,6 +1914,383 @@
               <template x-if="filteredViralLibrary.length === 0">
                 <div class="py-12 text-center text-xs text-slate-400">Belum ada referensi ide viral tersimpan.</div>
               </template>
+            </div>
+          </div>
+
+          <!-- TAB BARU: DRAFT MODE ACC (APPROVAL & REVISION WORKFLOW) -->
+          <div x-show="currentTab === 'draft_acc'" class="space-y-4">
+            <!-- Toolbar Filter Status, Pencarian, & Tombol Buat Draf -->
+            <div class="bg-surface p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+              <!-- Filter Status Chips -->
+              <div class="flex flex-wrap items-center gap-1.5">
+                <button @click="draftAccStatusFilter = 'all'" :class="draftAccStatusFilter === 'all' ? 'bg-brand-600 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
+                  <span>Semua Draf</span> (<span x-text="draftAcc.length"></span>)
+                </button>
+                <button @click="draftAccStatusFilter = 'Pending'" :class="draftAccStatusFilter === 'Pending' ? 'bg-amber-500 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
+                  <span>Pending ACC</span> (<span x-text="getDraftAccStatusCount('Pending')"></span>)
+                </button>
+                <button @click="draftAccStatusFilter = 'Approved'" :class="draftAccStatusFilter === 'Approved' ? 'bg-emerald-600 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
+                  <span>Approved</span> (<span x-text="getDraftAccStatusCount('Approved')"></span>)
+                </button>
+                <button @click="draftAccStatusFilter = 'Revision'" :class="draftAccStatusFilter === 'Revision' ? 'bg-amber-600 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
+                  <span>Perlu Revisi</span> (<span x-text="getDraftAccStatusCount('Revision')"></span>)
+                </button>
+                <button @click="draftAccStatusFilter = 'Rejected'" :class="draftAccStatusFilter === 'Rejected' ? 'bg-rose-600 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
+                  <span>Rejected</span> (<span x-text="getDraftAccStatusCount('Rejected')"></span>)
+                </button>
+              </div>
+
+              <!-- Baris Pencarian & Tombol Aksi -->
+              <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
+                <div class="relative flex-1 max-w-md">
+                  <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                  <input type="text" x-model="draftAccSearch" placeholder="Cari judul draf, teks hook, atau nama produk..." class="w-full text-xs pl-9 pr-3 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20">
+                </div>
+
+                <button @click="openAddDraftAccModal()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl flex items-center justify-center space-x-1.5 shadow-md shadow-brand-500/20 transition active:scale-95 shrink-0">
+                  <i data-lucide="plus" class="w-4 h-4"></i>
+                  <span>+ Ajukan Draf Konten Baru</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- List Kartu Draf Konten (Expanded View Utas 1 & 2 Terbuka Penuh) -->
+            <div class="space-y-4">
+              <template x-for="draft in filteredDraftAccList" :key="draft.draft_id">
+                <div class="bg-surface rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm hover:border-slate-300 transition space-y-4">
+                  <!-- Header Draf: Status, Judul & Info Terkait -->
+                  <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-3 border-b border-slate-100">
+                    <div class="space-y-1.5 min-w-0">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span :class="getDraftAccStatusBadgeClass(draft.approval_status)" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold border inline-flex items-center space-x-1" x-text="draft.approval_status"></span>
+                        <h3 class="text-sm sm:text-base font-bold text-slate-900 truncate" x-text="draft.title || 'Draf Konten Tanpa Judul'"></h3>
+                      </div>
+                      <div class="flex items-center space-x-2 text-[11px] text-slate-400">
+                        <span x-text="'Diajukan ' + formatDate(draft.created_at)"></span>
+                        <span x-show="draft.updated_at && draft.updated_at !== draft.created_at">•</span>
+                        <span x-show="draft.updated_at && draft.updated_at !== draft.created_at" x-text="'Diperbarui ' + formatTimeAgo(draft.updated_at)"></span>
+                      </div>
+                    </div>
+
+                    <!-- Micro-Card Produk & Tombol Referensi Viral Sejajar di Kanan -->
+                    <div class="flex flex-wrap items-center gap-2 shrink-0">
+                      <!-- Tombol Referensi Bank Viral Interaktif -->
+                      <template x-if="draft.viral_id && getViralItem(draft.viral_id).viral_id">
+                        <button type="button" @click="openViralReferenceDetail(draft.viral_id)" class="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition flex items-center space-x-1 shadow-2xs" title="Klik untuk melihat sumber referensi viral">
+                          <i data-lucide="flame" class="w-3.5 h-3.5 text-amber-600"></i>
+                          <span class="truncate max-w-[150px]" x-text="'Acuan: ' + getViralItem(draft.viral_id).title"></span>
+                        </button>
+                      </template>
+
+                      <!-- Micro-Card Produk -->
+                      <template x-if="draft.product_id && getProduct(draft.product_id).product_id">
+                        <div class="p-1.5 pr-2.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center space-x-2">
+                          <img :src="getProduct(draft.product_id).cover_url || getFirstProductMediaUrl(draft.product_id) || 'https://via.placeholder.com/32'" class="w-7 h-7 rounded-lg object-cover border border-slate-200 shrink-0">
+                          <div class="min-w-0">
+                            <span class="block text-[11px] font-bold text-slate-800 truncate max-w-[160px]" x-text="getProduct(draft.product_id).title"></span>
+                            <span class="text-[9px] text-emerald-600 font-semibold" x-text="formatRupiah(getProduct(draft.product_id).price) + ' • ' + getProduct(draft.product_id).commission_pct + '%'"></span>
+                          </div>
+                          <template x-if="getProduct(draft.product_id).affiliate_link">
+                            <a :href="getProduct(draft.product_id).affiliate_link" target="_blank" @click.stop class="p-1 text-slate-400 hover:text-brand-600 transition" title="Buka Link Spill">
+                              <i data-lucide="external-link" class="w-3 h-3"></i>
+                            </a>
+                          </template>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+
+                  <!-- Expanded View Seluruh Rantai Utas Langsung Terbuka Penuh -->
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    <template x-for="(chn, chnIdx) in parseDraftChains(draft.chains_json)" :key="'dch-view-'+chnIdx">
+                      <div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/90 space-y-2 flex flex-col justify-between">
+                        <div class="space-y-2">
+                          <div class="flex items-center justify-between text-xs font-bold text-slate-700">
+                            <span class="flex items-center space-x-1.5">
+                              <span class="w-5 h-5 rounded-full bg-brand-100 text-brand-700 text-[10px] flex items-center justify-center font-bold" x-text="chnIdx + 1"></span>
+                              <span x-text="chnIdx === 0 ? 'Utas #1 (Hook Utama)' : 'Utas #' + (chnIdx + 1) + ' (Sambungan / CTA)'"></span>
+                            </span>
+                            <span class="text-[10px] font-mono text-slate-400" x-text="(chn.text_content || chn.content_text || '').length + ' karakter'"></span>
+                          </div>
+                          <p class="text-xs text-slate-800 whitespace-pre-wrap leading-relaxed bg-white p-3 rounded-xl border border-slate-100" x-text="chn.text_content || chn.content_text || 'Belum ada teks'"></p>
+                        </div>
+
+                        <!-- Thumbnail Media Utas Ini -->
+                        <template x-if="(chn.media_urls || []).length > 0">
+                          <div class="pt-2 border-t border-slate-200/60">
+                            <span class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Aset Media Terpilih (<span x-text="(chn.media_urls || []).length"></span>):</span>
+                            <div class="flex overflow-x-auto space-x-2 pb-1">
+                              <template x-for="(mUrl, muIdx) in chn.media_urls" :key="'dm-m-'+chnIdx+'-'+muIdx">
+                                <div class="relative w-14 h-14 rounded-xl overflow-hidden border border-slate-200 bg-slate-900 shrink-0">
+                                  <template x-if="isVideoUrl(mUrl)">
+                                    <video :src="mUrl" class="w-full h-full object-cover" muted playsinline></video>
+                                  </template>
+                                  <template x-if="!isVideoUrl(mUrl)">
+                                    <img :src="mUrl" class="w-full h-full object-cover cursor-pointer" @click="openFullscreenMedia(mUrl, false, 'Media Utas #' + (chnIdx + 1))">
+                                  </template>
+                                </div>
+                              </template>
+                            </div>
+                          </div>
+                        </template>
+                      </div>
+                    </template>
+                  </div>
+
+                  <!-- Kolom Catatan Revisi Aktif (Jika status Revision) -->
+                  <template x-if="draft.approval_status === 'Revision' && draft.revision_notes">
+                    <div class="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 space-y-1">
+                      <div class="flex items-center space-x-1.5 font-bold">
+                        <i data-lucide="alert-circle" class="w-4 h-4 text-amber-600"></i>
+                        <span>Catatan Revisi dari Reviewer:</span>
+                      </div>
+                      <p class="text-slate-800 pl-5 leading-relaxed italic" x-text="'“' + draft.revision_notes + '”'"></p>
+                    </div>
+                  </template>
+
+                  <!-- Action Bar Admin (Approval, Revision, Reject, Jadwalkan, & Hapus) -->
+                  <div class="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
+                    <div class="flex items-center space-x-2">
+                      <!-- Tombol Approve (Tetap di tabel yang sama) -->
+                      <button type="button" @click="submitDraftApprovalAction(draft.draft_id, 'Approved', '')" :disabled="draftActionLoadingId === draft.draft_id" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs disabled:opacity-50">
+                        <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
+                        <span>Approved</span>
+                      </button>
+
+                      <!-- Tombol Revision (Membuka popup catatan wajib) -->
+                      <button type="button" @click="openDraftRevisionModal(draft)" :disabled="draftActionLoadingId === draft.draft_id" class="px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs disabled:opacity-50">
+                        <i data-lucide="edit-2" class="w-3.5 h-3.5 text-amber-600"></i>
+                        <span>Revision</span>
+                      </button>
+
+                      <!-- Tombol Rejected -->
+                      <button type="button" @click="submitDraftApprovalAction(draft.draft_id, 'Rejected', '')" :disabled="draftActionLoadingId === draft.draft_id" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-50">
+                        <i data-lucide="x-circle" class="w-3.5 h-3.5"></i>
+                        <span>Rejected</span>
+                      </button>
+                    </div>
+
+                    <div class="flex items-center space-x-2">
+                      <!-- Jika status Approved: Tim bisa langsung mengirim ke Composer untuk dijadwalkan -->
+                      <template x-if="draft.approval_status === 'Approved'">
+                        <button type="button" @click="loadDraftAccIntoComposer(draft)" class="px-3.5 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs">
+                          <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
+                          <span>Jadwalkan ke Composer</span>
+                        </button>
+                      </template>
+
+                      <button type="button" @click="openEditDraftAccModal(draft)" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition" title="Edit Konten Draf">
+                        <i data-lucide="pencil" class="w-4 h-4"></i>
+                      </button>
+
+                      <button type="button" @click="promptDeleteDraftAcc(draft.draft_id)" class="p-2 bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-xl transition" title="Hapus Draf Ini">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <template x-if="filteredDraftAccList.length === 0">
+                <div class="py-16 text-center text-xs text-slate-400 bg-surface rounded-2xl border border-slate-200 space-y-2">
+                  <i data-lucide="clipboard-check" class="w-8 h-8 text-slate-300 mx-auto"></i>
+                  <p class="font-bold text-slate-600">Tidak ada draf konten pada filter ini.</p>
+                  <p class="text-[11px] text-slate-400">Klik "+ Ajukan Draf Konten Baru" untuk membuat draf persetujuan.</p>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- MODAL: ADD / EDIT DRAFT ACC (DENGAN PEMILIHAN MEDIA PRODUK OTOMATIS) -->
+          <div x-cloak x-show="draftAccModal.show" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-3 sm:p-4">
+            <div class="bg-surface rounded-2xl max-w-3xl w-full mx-auto shadow-2xl border border-slate-100 overflow-hidden flex flex-col" style="max-height: 90vh;">
+              <!-- Header Modal -->
+              <div class="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
+                <div>
+                  <h3 class="text-base font-bold text-slate-900" x-text="draftAccModal.isEdit ? 'Edit Draf Konten ACC' : 'Ajukan Draf Konten Baru untuk ACC'"></h3>
+                  <p class="text-xs text-slate-500">Pilih produk, acuan viral, dan centang aset media langsung dari katalog</p>
+                </div>
+                <button @click="draftAccModal.show = false" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                  <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+              </div>
+
+              <!-- Body Modal (Scrollable) -->
+              <div class="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs flex-1 bg-slate-50/50">
+                <!-- Baris Judul Draf -->
+                <div>
+                  <label class="block font-semibold text-slate-700 mb-1">Judul / Topik Draf</label>
+                  <input type="text" x-model="draftAccModal.data.title" placeholder="Contoh: Review Stik Keju Pouch 250g - Hook Viral" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20">
+                </div>
+
+                <!-- Dropdown Produk & Dropdown Acuan Bank Viral -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <!-- Dropdown Produk -->
+                  <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Pilih Produk Affiliate Terkait</label>
+                    <select x-model="draftAccModal.data.product_id" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none font-medium">
+                      <option value="">-- Pilih Produk --</option>
+                      <template x-for="p in products" :key="'dm-prod-'+p.product_id">
+                        <option :value="p.product_id" x-text="p.title + ' (' + formatRupiah(p.price) + ')'"></option>
+                      </template>
+                    </select>
+                  </div>
+
+                  <!-- Dropdown Acuan Bank Viral (Referensi Bacaan Saja, Bukan Auto-Fill) -->
+                  <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Acuan dari Bank Ide Viral (Opsional)</label>
+                    <div class="flex items-center space-x-1.5">
+                      <select x-model="draftAccModal.data.viral_id" @change="applyViralReferenceToDraftModal()" class="flex-1 text-xs p-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none font-medium">
+                        <option value="">-- Tanpa Acuan Viral (Tulis Bebas) --</option>
+                        <template x-for="v in viralLibrary" :key="'dm-vir-'+v.viral_id">
+                          <option :value="v.viral_id" x-text="v.title + (v.views_count ? ' (' + formatViewsCount(v.views_count) + ' views)' : '')"></option>
+                        </template>
+                      </select>
+                      <template x-if="draftAccModal.data.viral_id">
+                        <button type="button" @click="openViralReferenceDetail(draftAccModal.data.viral_id)" class="px-2.5 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition flex items-center space-x-1 shrink-0" title="Buka Detail Acuan Viral">
+                          <i data-lucide="eye" class="w-3.5 h-3.5 text-amber-600"></i>
+                          <span>Lihat Acuan</span>
+                        </button>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Panel Bacaan Acuan Bank Viral (Hanya Referensi / Bacaan, Tidak Menimpa Teks) -->
+                <template x-if="draftAccModal.data.viral_id && getViralItem(draftAccModal.data.viral_id).viral_id">
+                  <div class="p-3 bg-amber-50/80 rounded-2xl border border-amber-200/90 text-xs space-y-2">
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center space-x-2">
+                        <i data-lucide="flame" class="w-4 h-4 text-amber-600"></i>
+                        <span class="font-bold text-amber-900" x-text="'Acuan Referensi: ' + getViralItem(draftAccModal.data.viral_id).title"></span>
+                      </div>
+                      <button type="button" @click="openViralReferenceDetail(draftAccModal.data.viral_id)" class="text-[11px] font-bold text-amber-800 hover:underline flex items-center space-x-0.5">
+                        <span>Buka Detail Lengkap</span>
+                        <i data-lucide="chevron-right" class="w-3 h-3"></i>
+                      </button>
+                    </div>
+                    <div class="p-2 bg-white rounded-xl border border-amber-100 text-[11px] text-slate-700 italic space-y-1">
+                      <span class="text-[9px] font-bold text-slate-400 uppercase not-italic block">Pola Hook Referensi:</span>
+                      <p class="line-clamp-2" x-text="'“' + (parseViralChains(getViralItem(draftAccModal.data.viral_id).chains_json)[0] ? parseViralChains(getViralItem(draftAccModal.data.viral_id).chains_json)[0].content_text : '-') + '”'"></p>
+                    </div>
+                  </div>
+                </template>
+
+                <!-- Dynamic Multi-Utas Cards (Teks Bebas Ketik + Pilihan Media Di Dalam Box Masing-Masing) -->
+                <div class="space-y-3">
+                  <template x-for="(chain, cIdx) in draftAccModal.chains" :key="'dchain-'+cIdx">
+                    <div class="p-3.5 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+                      <!-- Header Box Utas -->
+                      <div class="flex items-center justify-between font-bold text-slate-800">
+                        <div class="flex items-center space-x-2">
+                          <span class="w-5 h-5 rounded-full bg-brand-100 text-brand-700 text-[10px] flex items-center justify-center font-bold" x-text="cIdx + 1"></span>
+                          <span x-text="cIdx === 0 ? 'Utas #1 (Hook Utama)' : 'Utas #' + (cIdx + 1) + ' (Sambungan / CTA)'"></span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                          <span class="text-[10px] font-mono text-slate-400" x-text="(chain.text_content || '').length + ' karakter • ' + (chain.media_urls || []).length + ' media'"></span>
+                          <template x-if="draftAccModal.chains.length > 1">
+                            <button type="button" @click="removeDraftAccChain(cIdx)" class="p-1 text-slate-400 hover:text-rose-600 transition" title="Hapus Utas Ini">
+                              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            </button>
+                          </template>
+                        </div>
+                      </div>
+
+                      <!-- Textarea Bebas Ketik -->
+                      <textarea x-model="chain.text_content" rows="3" :placeholder="cIdx === 0 ? 'Tulis hook utama yang menarik perhatian audiens...' : 'Tulis ulasan lanjutan atau ajakan klik produk...'" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 leading-relaxed"></textarea>
+
+                      <!-- Slot Media Produk Di Dalam Box Utas Ini -->
+                      <div class="pt-2 border-t border-slate-100 space-y-2">
+                        <div class="flex items-center justify-between">
+                          <span class="text-[10px] uppercase font-bold text-slate-500 flex items-center space-x-1">
+                            <i data-lucide="images" class="w-3 h-3 text-brand-500"></i>
+                            <span>Pilih Media untuk Utas Ini:</span>
+                          </span>
+                          <span class="text-[10px] text-brand-600 font-semibold" x-text="(chain.media_urls || []).length + ' Terpilih'"></span>
+                        </div>
+
+                        <!-- Jika Produk Dipilih & Punya Media -->
+                        <template x-if="draftAccModal.data.product_id && getProductMediaForDraftModal().length > 0">
+                          <div class="flex overflow-x-auto space-x-2 pb-1 pt-0.5">
+                            <template x-for="m in getProductMediaForDraftModal()" :key="'dchain-'+cIdx+'-m-'+m.media_id">
+                              <div @click="toggleDraftModalMedia(cIdx, m.cloudinary_url)" class="relative w-16 h-16 rounded-xl overflow-hidden border-2 cursor-pointer shrink-0 transition" :class="isDraftMediaSelected(cIdx, m.cloudinary_url) ? 'border-brand-600 ring-2 ring-brand-500/20' : 'border-slate-200 bg-slate-100 opacity-70 hover:opacity-100'">
+                                <img :src="m.thumbnail_url || m.cloudinary_url" class="w-full h-full object-cover">
+                                <span class="absolute top-0.5 left-0.5 bg-black/60 text-white text-[7px] px-1 rounded font-bold" x-text="m.media_type"></span>
+                                <template x-if="isDraftMediaSelected(cIdx, m.cloudinary_url)">
+                                  <div class="absolute inset-0 bg-brand-600/30 flex items-center justify-center">
+                                    <div class="w-5 h-5 rounded-full bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center shadow-xs">✓</div>
+                                  </div>
+                                </template>
+                              </div>
+                            </template>
+                          </div>
+                        </template>
+
+                        <!-- Jika Produk Dipilih Tapi Belum Punya Media -->
+                        <template x-if="draftAccModal.data.product_id && getProductMediaForDraftModal().length === 0">
+                          <div class="text-[11px] text-slate-400 italic py-1">Produk ini belum memiliki aset media di katalog.</div>
+                        </template>
+
+                        <!-- Jika Belum Memilih Produk -->
+                        <template x-if="!draftAccModal.data.product_id">
+                          <div class="text-[11px] text-slate-400 italic py-1 flex items-center space-x-1">
+                            <i data-lucide="info" class="w-3 h-3 text-slate-400"></i>
+                            <span>Pilih produk affiliate di atas untuk memunculkan pilihan media produk ini.</span>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+
+                <!-- Tombol Dinamis: + Tambah Utas -->
+                <button type="button" @click="addDraftAccChain()" class="w-full py-2.5 border-2 border-dashed border-slate-200 hover:border-brand-500 hover:bg-brand-50/20 text-slate-600 hover:text-brand-600 rounded-2xl text-xs font-bold flex items-center justify-center space-x-2 transition">
+                  <i data-lucide="plus" class="w-4 h-4"></i>
+                  <span>+ Tambah Utas Sambungan Baru</span>
+                </button>
+              </div>
+
+              <!-- Footer Modal -->
+              <div class="p-4 border-t border-slate-100 flex items-center justify-end space-x-2 shrink-0 bg-white">
+                <button type="button" @click="draftAccModal.show = false" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">Batal</button>
+                <button type="button" @click="submitSaveDraftAcc()" :disabled="draftAccModal.loading" class="px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-sm transition flex items-center space-x-1.5 disabled:opacity-50">
+                  <template x-if="draftAccModal.loading"><div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div></template>
+                  <span x-text="draftAccModal.loading ? 'Menyimpan...' : 'Ajukan Draf Konten'"></span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- MODAL: CATATAN REVISI DRAFT (WAJIB ISI CATATAN) -->
+          <div x-cloak x-show="draftRevisionModal.show" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+            <div class="bg-surface rounded-2xl p-5 max-w-md w-full mx-auto shadow-2xl border border-slate-100 space-y-4">
+              <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div class="flex items-center space-x-2">
+                  <div class="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                    <i data-lucide="edit-2" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <h3 class="text-sm font-bold text-slate-900">Kirim Catatan Revisi Draf</h3>
+                    <p class="text-[11px] text-slate-500">Jelaskan poin perbaikan yang perlu diubah tim</p>
+                  </div>
+                </div>
+                <button @click="draftRevisionModal.show = false" class="text-slate-400 hover:text-slate-600 p-1">
+                  <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Catatan Revisi <span class="text-rose-500 font-bold">*Wajib Diisi</span></label>
+                <textarea x-model="draftRevisionModal.notes" rows="4" placeholder="Contoh: Hook utas 1 kurang memancing penasaran, tolong ganti dengan perbandingan harga..." class="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 leading-relaxed"></textarea>
+              </div>
+
+              <div class="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100">
+                <button @click="draftRevisionModal.show = false" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Batal</button>
+                <button @click="submitDraftRevision()" :disabled="!draftRevisionModal.notes.trim() || draftRevisionModal.loading" class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                  <template x-if="draftRevisionModal.loading"><div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div></template>
+                  <span>Kirim Permintaan Revisi</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -2745,117 +3190,37 @@
                 <div class="flex items-center space-x-3">
                   <div class="p-2.5 bg-slate-100 text-slate-700 rounded-xl"><i data-lucide="sliders" class="w-5 h-5"></i></div>
                   <div>
-                    <h3 class="text-sm font-bold text-slate-900">Setelan Umum & Batas Pantau</h3>
-                    <p class="text-xs text-slate-500">Konfigurasi zona waktu dan batas waktu fallback target views</p>
+                    <h3 class="text-sm font-bold text-slate-900">Setelan Umum & Auto-Staggering</h3>
+                    <p class="text-xs text-slate-500">Konfigurasi zona waktu, jeda otomatis antar armada, dan batas waktu target views</p>
                   </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div>
                     <label class="block text-xs font-semibold text-slate-700 mb-1">Zona Waktu (Timezone)</label>
                     <input type="text" x-model="settings.timezone" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50">
                   </div>
                   <div>
-                    <label class="block text-xs font-semibold text-slate-700 mb-1">Batas Waktu Target Views (Jam)</label>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Jeda Otomatis Antar Akun (Menit)</label>
+                    <input type="number" min="1" max="60" x-model.number="settings.auto_stagger_minutes" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 font-bold text-brand-600" placeholder="3">
+                    <span class="text-[10px] text-slate-400 mt-1 block">Mencegah benturan jadwal & rate limit Meta</span>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Batas Target Views (Jam)</label>
                     <input type="number" x-model="settings.default_fallback_views_hours" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50" placeholder="24">
                   </div>
                   <div>
-                    <label class="block text-xs font-semibold text-slate-700 mb-1">Tindakan Saat Batas Waktu Habis</label>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Aksi Timeout Target Views</label>
                     <select x-model="settings.target_views_timeout_action" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 font-medium">
                       <option value="auto_release">Terbit Sisa Utas Otomatis</option>
                       <option value="stop_check">Hentikan Pemantauan</option>
                     </select>
                   </div>
                 </div>
-              </div>
-
-              <!-- Card Jendela Waktu Rekomendasi Jam Terbaik AI -->
-              <div class="bg-surface rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-                <div class="flex items-center space-x-3">
-                  <div class="p-2.5 bg-amber-50 text-amber-600 rounded-xl"><i data-lucide="clock" class="w-5 h-5"></i></div>
-                  <div>
-                    <h3 class="text-sm font-bold text-slate-900">Jendela Waktu Rekomendasi Jam Terbaik AI</h3>
-                    <p class="text-xs text-slate-500">Rentang jam aktif audiens harian yang menjadi rujukan tombol "Jam Terbaik AI"</p>
-                  </div>
-                </div>
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-1">
-                  <!-- Pagi -->
-                  <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-                    <span class="text-xs font-bold text-slate-800 flex items-center space-x-1">
-                      <span class="w-2 h-2 rounded-full bg-amber-400"></span>
-                      <span>1. Jendela Pagi</span>
-                    </span>
-                    <div class="grid grid-cols-2 gap-2">
-                      <div>
-                        <label class="block text-[10px] text-slate-500 font-semibold mb-0.5">Mulai</label>
-                        <input type="text" x-model="settings.best_time_pagi_start" placeholder="08:00" class="w-full text-xs p-1.5 rounded-lg border border-slate-200 bg-white font-mono">
-                      </div>
-                      <div>
-                        <label class="block text-[10px] text-slate-500 font-semibold mb-0.5">Selesai</label>
-                        <input type="text" x-model="settings.best_time_pagi_end" placeholder="10:00" class="w-full text-xs p-1.5 rounded-lg border border-slate-200 bg-white font-mono">
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Siang -->
-                  <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-                    <span class="text-xs font-bold text-slate-800 flex items-center space-x-1">
-                      <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                      <span>2. Jendela Siang</span>
-                    </span>
-                    <div class="grid grid-cols-2 gap-2">
-                      <div>
-                        <label class="block text-[10px] text-slate-500 font-semibold mb-0.5">Mulai</label>
-                        <input type="text" x-model="settings.best_time_siang_start" placeholder="12:00" class="w-full text-xs p-1.5 rounded-lg border border-slate-200 bg-white font-mono">
-                      </div>
-                      <div>
-                        <label class="block text-[10px] text-slate-500 font-semibold mb-0.5">Selesai</label>
-                        <input type="text" x-model="settings.best_time_siang_end" placeholder="14:00" class="w-full text-xs p-1.5 rounded-lg border border-slate-200 bg-white font-mono">
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Sore -->
-                  <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-                    <span class="text-xs font-bold text-slate-800 flex items-center space-x-1">
-                      <span class="w-2 h-2 rounded-full bg-sky-400"></span>
-                      <span>3. Jendela Sore</span>
-                    </span>
-                    <div class="grid grid-cols-2 gap-2">
-                      <div>
-                        <label class="block text-[10px] text-slate-500 font-semibold mb-0.5">Mulai</label>
-                        <input type="text" x-model="settings.best_time_sore_start" placeholder="16:00" class="w-full text-xs p-1.5 rounded-lg border border-slate-200 bg-white font-mono">
-                      </div>
-                      <div>
-                        <label class="block text-[10px] text-slate-500 font-semibold mb-0.5">Selesai</label>
-                        <input type="text" x-model="settings.best_time_sore_end" placeholder="18:00" class="w-full text-xs p-1.5 rounded-lg border border-slate-200 bg-white font-mono">
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Malam -->
-                  <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-                    <span class="text-xs font-bold text-slate-800 flex items-center space-x-1">
-                      <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
-                      <span>4. Jendela Malam</span>
-                    </span>
-                    <div class="grid grid-cols-2 gap-2">
-                      <div>
-                        <label class="block text-[10px] text-slate-500 font-semibold mb-0.5">Mulai</label>
-                        <input type="text" x-model="settings.best_time_malam_start" placeholder="19:00" class="w-full text-xs p-1.5 rounded-lg border border-slate-200 bg-white font-mono">
-                      </div>
-                      <div>
-                        <label class="block text-[10px] text-slate-500 font-semibold mb-0.5">Selesai</label>
-                        <input type="text" x-model="settings.best_time_malam_end" placeholder="22:00" class="w-full text-xs p-1.5 rounded-lg border border-slate-200 bg-white font-mono">
-                      </div>
-                    </div>
-                  </div>
-                </div>
 
                 <div class="flex justify-end pt-2">
                   <button @click="saveSystemSettings()" :disabled="settingsSaving" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-xl shadow-sm transition disabled:opacity-50">
-                    <span x-text="settingsSaving ? 'Menyimpan...' : 'Simpan Seluruh Pengaturan'"></span>
+                    <span x-text="settingsSaving ? 'Menyimpan...' : 'Simpan Pengaturan Umum'"></span>
                   </button>
                 </div>
               </div>
@@ -2913,14 +3278,31 @@
         <div class="mt-4 space-y-3">
           <div x-show="!accountModal.isEdit">
             <label class="block text-xs font-semibold text-slate-700 mb-1">Long-Lived Access Token</label>
-            <textarea x-model="accountModal.token" rows="3" placeholder="EAAB..." class="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 font-mono"></textarea>
+            <textarea x-model="accountModal.token" rows="2" placeholder="EAAB..." class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 font-mono"></textarea>
           </div>
           <div>
             <label class="block text-xs font-semibold text-slate-700 mb-1">Kategori / Niche Akun</label>
             <input type="text" x-model="accountModal.category" placeholder="Contoh: Home & Living, Beauty, Gadget, Kuliner" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50">
           </div>
+
+          <!-- Konfigurasi Jam Jendela Operasional Khusus Akun Ini -->
+          <div class="p-3 bg-amber-50/70 rounded-xl border border-amber-200 space-y-2">
+            <span class="block text-[11px] font-bold text-amber-900 uppercase">Jam Jendela Posting Akun Ini (WIB)</span>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[10px] text-slate-600 font-semibold mb-0.5">Jam Mulai</label>
+                <input type="time" x-model="accountModal.window_start" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white font-mono">
+              </div>
+              <div>
+                <label class="block text-[10px] text-slate-600 font-semibold mb-0.5">Jam Selesai</label>
+                <input type="time" x-model="accountModal.window_end" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white font-mono">
+              </div>
+            </div>
+            <span class="text-[10px] text-slate-500 block">Jadwal algoritma jam terbaik akan diprioritaskan di dalam rentang ini.</span>
+          </div>
+
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Karakter / Persona AI Khusus Akun Ini</label>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Karakter / Persona Khusus Akun Ini</label>
             <textarea x-model="accountModal.account_persona" rows="3" placeholder="Gaya bahasa santai, khas ibu muda, gunakan bahasa persuasif tanpa hard selling..." class="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50"></textarea>
           </div>
         </div>
@@ -3883,19 +4265,20 @@
       </div>
     </div>
 
-    <!-- MODAL PRATINJAU DETAIL POSTINGAN LENGKAP (MERGE INSIGHTS & UTAS) -->
-    <div x-cloak x-show="postDetailModal.show" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-      <div class="bg-surface rounded-2xl p-6 max-w-4xl w-full mx-auto shadow-2xl border border-slate-100 max-h-[92vh] flex flex-col justify-between">
-        <div>
-          <!-- Header Akun, Status & Bar Target Views Sejajar di Atas -->
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3.5 border-b border-slate-100 gap-3">
+    <!-- MODAL PRATINJAU DETAIL POSTINGAN LENGKAP -->
+    <div x-cloak x-show="postDetailModal.show" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-3 sm:p-4">
+      <div class="bg-surface rounded-2xl max-w-3xl w-full mx-auto shadow-2xl border border-slate-100 overflow-hidden" style="max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;">
+        
+        <!-- Header Modal (Flex: 0 0 auto) -->
+        <div class="p-4 sm:p-5 border-b border-slate-100 bg-white" style="flex: 0 0 auto;">
+          <div class="flex items-center justify-between gap-3">
             <div class="flex items-center space-x-3 min-w-0">
-              <img :src="getAccount(postDetailModal.post ? postDetailModal.post.account_id : '').profile_picture_url || 'https://via.placeholder.com/40'" @error="this.onerror=null; this.src='https://via.placeholder.com/40'" class="w-11 h-11 rounded-full border border-slate-200 shrink-0 object-cover">
+              <img :src="getAccount(postDetailModal.post ? postDetailModal.post.account_id : '').profile_picture_url || 'https://via.placeholder.com/40'" @error="this.onerror=null; this.src='https://via.placeholder.com/40'" class="w-10 h-10 rounded-full border border-slate-200 shrink-0 object-cover">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-1.5">
-                  <h3 class="text-sm sm:text-base font-bold text-slate-900 truncate" x-text="'@' + getAccount(postDetailModal.post ? postDetailModal.post.account_id : '').username"></h3>
-                  <i data-lucide="badge-check" class="w-4 h-4 text-brand-600 shrink-0"></i>
-                  <span :class="getStatusBadgeClass(postDetailModal.post ? postDetailModal.post.status : '')" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold" x-text="postDetailModal.post ? postDetailModal.post.status : ''"></span>
+                  <h3 class="text-xs sm:text-sm font-bold text-slate-900 truncate" x-text="'@' + getAccount(postDetailModal.post ? postDetailModal.post.account_id : '').username"></h3>
+                  <i data-lucide="badge-check" class="w-3.5 h-3.5 text-brand-600 shrink-0"></i>
+                  <span :class="getStatusBadgeClass(postDetailModal.post ? postDetailModal.post.status : '')" class="px-2 py-0.5 rounded-full text-[10px] font-bold" x-text="postDetailModal.post ? postDetailModal.post.status : ''"></span>
                   <template x-if="postDetailModal.post && isWaitingViewsPost(postDetailModal.post)">
                     <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center space-x-1">
                       <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
@@ -3903,7 +4286,7 @@
                     </span>
                   </template>
                 </div>
-                <div class="flex items-center space-x-2 text-[11px] text-slate-400 mt-0.5">
+                <div class="flex items-center space-x-2 text-[10px] text-slate-400 mt-0.5">
                   <span x-text="postDetailModal.post ? formatDate(postDetailModal.post.scheduled_at) : ''"></span>
                   <span>•</span>
                   <span x-text="postDetailModal.post ? (getPublishedChainsCount(postDetailModal.post.post_id) + ' dari ' + getPostChains(postDetailModal.post.post_id).length + ' Utas Terbit') : ''"></span>
@@ -3911,19 +4294,16 @@
               </div>
             </div>
 
-            <!-- Target Views Header Widget Sejajar di Samping Kanan -->
-            <div class="flex items-center space-x-3 self-end sm:self-center shrink-0">
+            <!-- Header Action & Close Button -->
+            <div class="flex items-center space-x-2 shrink-0">
               <template x-if="postDetailModal.post && isWaitingViewsPost(postDetailModal.post)">
-                <div class="w-48 sm:w-56 p-2 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-                  <div class="flex justify-between items-center text-[10px]">
-                    <span class="font-bold text-slate-700 flex items-center space-x-1">
-                      <i data-lucide="target" class="w-3 h-3 text-brand-600"></i>
-                      <span>Target Views</span>
-                    </span>
-                    <span class="font-mono font-bold text-brand-600" x-text="getPostMetric(postDetailModal.post.post_id, 'views') + ' / ' + (postDetailModal.post.target_views || 100) + ' (' + getTargetViewPercentage(postDetailModal.post) + '%)'"></span>
+                <div class="hidden sm:block w-40 p-1.5 bg-slate-50 rounded-xl border border-slate-200">
+                  <div class="flex justify-between items-center text-[9px] mb-0.5">
+                    <span class="font-bold text-slate-700">Target</span>
+                    <span class="font-mono font-bold text-brand-600" x-text="getTargetViewPercentage(postDetailModal.post) + '%'"></span>
                   </div>
                   <div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                    <div class="h-full bg-gradient-to-r from-brand-600 to-accent-500 transition-all rounded-full" :style="'width: ' + getTargetViewPercentage(postDetailModal.post) + '%'"></div>
+                    <div class="h-full bg-gradient-to-r from-brand-600 to-accent-500 rounded-full" :style="'width: ' + getTargetViewPercentage(postDetailModal.post) + '%'"></div>
                   </div>
                 </div>
               </template>
@@ -3932,155 +4312,148 @@
               </button>
             </div>
           </div>
+        </div>
 
-          <!-- Body Rantai Utas Lapang (Max-W-4XL) -->
-          <div class="mt-4 max-h-[66vh] overflow-y-auto space-y-3.5 pr-1 text-xs">
-            <template x-if="postDetailModal.post">
-              <div class="space-y-3">
-                <template x-for="(chain, cIdx) in getPostChains(postDetailModal.post.post_id)" :key="'dtl-chn-'+chain.chain_id">
-                  <div class="p-4 bg-slate-50/75 hover:bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5 transition">
-                    <!-- Chain Title, Status, Action & Links -->
-                    <div class="flex justify-between items-center text-xs">
-                      <div class="flex items-center space-x-2">
-                        <span class="w-5 h-5 rounded-full bg-brand-100 text-brand-700 font-bold text-[10px] flex items-center justify-center" x-text="cIdx + 1"></span>
-                        <span class="font-bold text-slate-800" x-text="cIdx === 0 ? 'Utas #1 (Root Hook)' : 'Utas #' + (cIdx + 1) + ' (Sambungan)'"></span>
-                        <span :class="chain.threads_post_id ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'" class="px-2 py-0.5 rounded-full text-[9px] font-bold" x-text="chain.threads_post_id ? 'Terbit' : 'Belum Terbit'"></span>
-                      </div>
-                      <div class="flex items-center space-x-2">
-                        <!-- Tombol Aksi Paksa Rilis Eksklusif Tepat di Dekat Kartu Utas #2 -->
-                        <template x-if="cIdx > 0 && !chain.threads_post_id && isRootChainPublished(postDetailModal.post) && isWaitingViewsPost(postDetailModal.post)">
-                          <button type="button" @click="forceReleasePost(postDetailModal.post.post_id); postDetailModal.show = false;" class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold transition flex items-center space-x-1 shadow-xs" title="Paksa rilis utas sambungan ini sekarang">
-                            <i data-lucide="zap" class="w-3 h-3"></i>
-                            <span>⚡ Paksa Rilis Utas Ini</span>
-                          </button>
-                        </template>
-                        <template x-if="chain.permalink">
-                          <a :href="chain.permalink" target="_blank" class="text-sky-600 hover:underline flex items-center space-x-1 font-semibold text-[11px]">
-                            <i data-lucide="external-link" class="w-3 h-3"></i>
-                            <span>Buka di Threads</span>
-                          </a>
-                        </template>
-                      </div>
+        <!-- Body Modal (Flex: 1 1 auto; overflow-y: auto) -->
+        <div class="p-4 sm:p-5 space-y-3.5 text-xs bg-slate-50/50" style="flex: 1 1 auto; overflow-y: auto;">
+          <template x-if="postDetailModal.post">
+            <div class="space-y-3">
+              <template x-for="(chain, cIdx) in getPostChains(postDetailModal.post.post_id)" :key="'dtl-chn-'+chain.chain_id">
+                <div class="p-3.5 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-2.5 transition">
+                  <!-- Header Utas -->
+                  <div class="flex justify-between items-center text-xs">
+                    <div class="flex items-center space-x-2">
+                      <span class="w-5 h-5 rounded-full bg-brand-100 text-brand-700 font-bold text-[10px] flex items-center justify-center" x-text="cIdx + 1"></span>
+                      <span class="font-bold text-slate-800" x-text="cIdx === 0 ? 'Utas #1 (Root Hook)' : 'Utas #' + (cIdx + 1) + ' (Sambungan)'"></span>
+                      <span :class="chain.threads_post_id ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'" class="px-2 py-0.5 rounded-full text-[9px] font-bold" x-text="chain.threads_post_id ? 'Terbit' : 'Belum Terbit'"></span>
                     </div>
-
-                    <!-- Konteks Produk Affiliate -->
-                    <template x-if="postDetailModal.post && postDetailModal.post.product_id && getProduct(postDetailModal.post.product_id).product_id">
-                      <div class="flex items-center space-x-1.5 pb-0.5">
-                        <span class="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
-                          <i data-lucide="tag" class="w-3 h-3 text-indigo-500"></i>
-                          <span class="font-bold" x-text="'Produk: ' + getProduct(postDetailModal.post.product_id).title"></span>
-                          <span class="text-emerald-600 font-bold" x-text="'(' + getProduct(postDetailModal.post.product_id).commission_pct + '%)'"></span>
-                        </span>
-                      </div>
-                    </template>
-
-                    <!-- Isi Teks Utas -->
-                    <p class="text-slate-800 whitespace-pre-wrap leading-relaxed text-xs" x-text="chain.content_text"></p>
-
-                    <!-- Pratinjau Media Asli Rantai Utas -->
-                    <template x-if="getChainMediaList(chain).length > 0">
-                      <div class="flex overflow-x-auto space-x-2 pt-1 pb-1">
-                        <template x-for="(mItem, mIdx) in getChainMediaList(chain)" :key="'dtl-med-'+chain.chain_id+'-'+mIdx">
-                          <div class="relative w-28 h-28 rounded-xl overflow-hidden border border-slate-200 bg-slate-900 shrink-0 shadow-xs">
-                            <template x-if="isVideoMedia(mItem)">
-                              <video :src="getMediaUrl(mItem)" controls muted playsinline class="w-full h-full object-cover"></video>
-                            </template>
-                            <template x-if="!isVideoMedia(mItem)">
-                              <img :src="getMediaUrl(mItem)" class="w-full h-full object-cover cursor-pointer hover:scale-105 transition" @click="openFullscreenMedia(getMediaUrl(mItem), false, 'Pratinjau Media Utas')">
-                            </template>
-                            <span class="absolute top-1 left-1 bg-black/60 text-white text-[8px] px-1 rounded font-bold" x-text="isVideoMedia(mItem) ? 'VIDEO' : 'IMAGE'"></span>
-                            <span class="absolute bottom-1 right-1 bg-black/60 text-white text-[8px] px-1 rounded font-mono" x-text="(mIdx + 1) + '/' + getChainMediaList(chain).length"></span>
-                          </div>
-                        </template>
-                      </div>
-                    </template>
-
-                    <!-- Strip Metrik & Tombol Trigger Komentar Per-Utas -->
-                    <div class="pt-2 mt-1 border-t border-slate-200/60 flex flex-wrap items-center justify-between gap-2">
-                      <div class="flex items-center space-x-4 text-xs font-semibold text-slate-700">
-                        <template x-if="cIdx === 0">
-                          <div class="flex items-center space-x-3">
-                            <span class="inline-flex items-center space-x-1" title="Views"><i data-lucide="eye" class="w-3.5 h-3.5 text-slate-400"></i><span x-text="getPostMetric(postDetailModal.post.post_id, 'views')"></span></span>
-                            <span class="inline-flex items-center space-x-1" title="Likes"><i data-lucide="heart" class="w-3.5 h-3.5 text-rose-500"></i><span x-text="getPostMetric(postDetailModal.post.post_id, 'likes')"></span></span>
-                            <span class="inline-flex items-center space-x-1" title="Reposts"><i data-lucide="repeat" class="w-3.5 h-3.5 text-emerald-500"></i><span x-text="getPostMetric(postDetailModal.post.post_id, 'reposts')"></span></span>
-                          </div>
-                        </template>
-                        
-                        <!-- Tombol Collapsible Komentar Spesifik Utas Ini -->
-                        <button type="button" @click="toggleChainComments(chain.chain_id)" class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border transition text-xs font-semibold" :class="isChainCommentsOpen(chain.chain_id) ? 'bg-brand-50 border-brand-200 text-brand-700 font-bold' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'">
-                          <i data-lucide="message-circle" class="w-3.5 h-3.5 text-brand-600"></i>
-                          <span x-text="getCommentsForChain(chain.chain_id).length + ' Komentar'"></span>
-                          <i :data-lucide="isChainCommentsOpen(chain.chain_id) ? 'chevron-up' : 'chevron-down'" class="w-3 h-3 text-slate-400"></i>
+                    <div class="flex items-center space-x-2">
+                      <!-- Tombol Paksa Rilis Utas Sambungan -->
+                      <template x-if="cIdx > 0 && !chain.threads_post_id && isRootChainPublished(postDetailModal.post) && isWaitingViewsPost(postDetailModal.post)">
+                        <button type="button" @click="forceReleasePost(postDetailModal.post.post_id); postDetailModal.show = false;" class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold transition flex items-center space-x-1 shadow-xs" title="Paksa rilis utas sambungan ini">
+                          <i data-lucide="zap" class="w-3 h-3"></i>
+                          <span>Paksa Rilis</span>
                         </button>
-                      </div>
-
-                      <template x-if="cIdx === 0">
-                        <span class="text-[10px] text-slate-400" x-text="getPostLastSynced(postDetailModal.post.post_id) ? ('Sinkron ' + getPostLastSynced(postDetailModal.post.post_id)) : 'Belum sinkron'"></span>
+                      </template>
+                      <template x-if="chain.permalink">
+                        <a :href="chain.permalink" target="_blank" class="text-sky-600 hover:underline flex items-center space-x-1 font-semibold text-[11px]">
+                          <i data-lucide="external-link" class="w-3 h-3"></i>
+                          <span>Threads</span>
+                        </a>
                       </template>
                     </div>
+                  </div>
 
-                    <!-- Area Komentar Spesifik Utas Ini (Collapsible / Tersembunyi Default) -->
-                    <div x-show="isChainCommentsOpen(chain.chain_id)" x-transition class="pt-2.5 mt-2 border-t border-slate-200/80 space-y-2">
-                      <div class="flex items-center justify-between text-xs">
-                        <span class="font-bold text-slate-700 flex items-center space-x-1">
-                          <i data-lucide="messages-square" class="w-3.5 h-3.5 text-brand-600"></i>
-                          <span>Komentar Masuk pada Utas Ini</span>
-                        </span>
-                        <button type="button" @click="syncCommentsForPost(postDetailModal.post.post_id)" :disabled="syncingCommentsPostId === postDetailModal.post.post_id" class="text-[10px] text-brand-600 hover:underline flex items-center space-x-1 font-semibold disabled:opacity-50">
-                          <i data-lucide="refresh-cw" class="w-3 h-3" :class="syncingCommentsPostId === postDetailModal.post.post_id ? 'animate-spin' : ''"></i>
-                          <span x-text="syncingCommentsPostId === postDetailModal.post.post_id ? 'Memindai...' : 'Sinkronkan Komentar'"></span>
-                        </button>
+                  <!-- Micro-Card Produk Affiliate -->
+                  <template x-if="postDetailModal.post && postDetailModal.post.product_id && getProduct(postDetailModal.post.product_id).product_id">
+                    <div class="p-2 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between gap-2.5">
+                      <div class="flex items-center space-x-2.5 min-w-0 flex-1">
+                        <img :src="getProduct(postDetailModal.post.product_id).cover_url || getFirstProductMediaUrl(postDetailModal.post.product_id) || 'https://via.placeholder.com/32'" class="w-7 h-7 rounded-lg object-cover border border-slate-200 shrink-0">
+                        <div class="min-w-0 flex-1">
+                          <span class="block text-[11px] font-bold text-slate-800 truncate" x-text="getProduct(postDetailModal.post.product_id).title"></span>
+                          <span class="text-[10px] font-bold text-emerald-600" x-text="formatRupiah(getProduct(postDetailModal.post.product_id).price) + ' • Komisi ' + getProduct(postDetailModal.post.product_id).commission_pct + '%'"></span>
+                        </div>
+                      </div>
+                      <template x-if="getProduct(postDetailModal.post.product_id).affiliate_link">
+                        <a :href="getProduct(postDetailModal.post.product_id).affiliate_link" target="_blank" class="px-2 py-0.5 bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 rounded-lg text-[10px] font-bold shrink-0 transition">
+                          Spill
+                        </a>
+                      </template>
+                    </div>
+                  </template>
+
+                  <!-- Isi Teks Utas -->
+                  <p class="text-slate-800 whitespace-pre-wrap leading-relaxed text-xs" x-text="chain.content_text"></p>
+
+                  <!-- Pratinjau Media Carousel -->
+                  <template x-if="getChainMediaList(chain).length > 0">
+                    <div class="flex overflow-x-auto space-x-2 pt-1 pb-1">
+                      <template x-for="(mItem, mIdx) in getChainMediaList(chain)" :key="'dtl-med-'+chain.chain_id+'-'+mIdx">
+                        <div class="relative w-24 h-24 rounded-xl overflow-hidden border border-slate-200 bg-slate-900 shrink-0 shadow-2xs">
+                          <template x-if="isVideoMedia(mItem)">
+                            <video :src="getMediaUrl(mItem)" controls muted playsinline class="w-full h-full object-cover"></video>
+                          </template>
+                          <template x-if="!isVideoMedia(mItem)">
+                            <img :src="getMediaUrl(mItem)" class="w-full h-full object-cover cursor-pointer" @click="openFullscreenMedia(getMediaUrl(mItem), false, 'Pratinjau Media Utas')">
+                          </template>
+                          <span class="absolute top-1 left-1 bg-black/60 text-white text-[7px] px-1 rounded font-bold" x-text="isVideoMedia(mItem) ? 'VID' : 'IMG'"></span>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+
+                  <!-- Metrik & Komentar: Khusus Utas Live / Terbit -->
+                  <template x-if="postDetailModal.post && (postDetailModal.post.status === 'Published' || postDetailModal.post.status === 'Waiting Views') && chain.threads_post_id">
+                    <div class="pt-2 border-t border-slate-100 space-y-2">
+                      <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex items-center space-x-3 text-xs font-semibold text-slate-700">
+                          <template x-if="cIdx === 0">
+                            <div class="flex items-center space-x-2.5">
+                              <span class="inline-flex items-center space-x-1" title="Views"><i data-lucide="eye" class="w-3.5 h-3.5 text-slate-400"></i><span x-text="getPostMetric(postDetailModal.post.post_id, 'views')"></span></span>
+                              <span class="inline-flex items-center space-x-1" title="Likes"><i data-lucide="heart" class="w-3.5 h-3.5 text-rose-500"></i><span x-text="getPostMetric(postDetailModal.post.post_id, 'likes')"></span></span>
+                              <span class="inline-flex items-center space-x-1" title="Reposts"><i data-lucide="repeat" class="w-3.5 h-3.5 text-emerald-500"></i><span x-text="getPostMetric(postDetailModal.post.post_id, 'reposts')"></span></span>
+                            </div>
+                          </template>
+                          
+                          <button type="button" @click="toggleChainComments(chain.chain_id)" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg border text-xs font-semibold" :class="isChainCommentsOpen(chain.chain_id) ? 'bg-brand-50 border-brand-200 text-brand-700 font-bold' : 'bg-slate-50 border-slate-200 text-slate-600'">
+                            <i data-lucide="message-circle" class="w-3 h-3 text-brand-600"></i>
+                            <span x-text="getCommentsForChain(chain.chain_id).length + ' Komentar'"></span>
+                            <i :data-lucide="isChainCommentsOpen(chain.chain_id) ? 'chevron-up' : 'chevron-down'" class="w-3 h-3 text-slate-400"></i>
+                          </button>
+                        </div>
+
+                        <template x-if="cIdx === 0">
+                          <span class="text-[9px] text-slate-400" x-text="getPostLastSynced(postDetailModal.post.post_id) ? ('Sinkron ' + getPostLastSynced(postDetailModal.post.post_id)) : ''"></span>
+                        </template>
                       </div>
 
-                      <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      <!-- Sub-Panel Komentar Utas -->
+                      <div x-show="isChainCommentsOpen(chain.chain_id)" x-transition class="pt-2 border-t border-slate-100 space-y-1.5">
                         <template x-for="comm in getCommentsForChain(chain.chain_id)" :key="comm.comment_id">
-                          <div class="p-2.5 bg-white rounded-xl border border-slate-100 text-xs shadow-2xs space-y-1">
-                            <div class="flex items-center justify-between">
-                              <div class="flex items-center space-x-1.5">
-                                <span class="font-bold text-slate-900" x-text="'@' + comm.from_username"></span>
-                                <span :class="comm.from_username && comm.from_username.indexOf('(Author)') !== -1 ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100 font-bold'" class="px-1.5 py-0.2 rounded-full text-[9px] border" x-text="comm.from_username && comm.from_username.indexOf('(Author)') !== -1 ? 'Akun Sendiri' : 'Calon Pembeli / Lead'"></span>
-                              </div>
-                              <span class="text-[10px] text-slate-400" x-text="formatDate(comm.created_at)"></span>
+                          <div class="p-2 bg-slate-50 rounded-xl border border-slate-100 text-xs space-y-1">
+                            <div class="flex items-center justify-between text-[10px]">
+                              <span class="font-bold text-slate-900" x-text="'@' + comm.from_username"></span>
+                              <span class="text-slate-400" x-text="formatDate(comm.created_at)"></span>
                             </div>
-                            <p class="text-slate-700 leading-relaxed font-normal" x-text="comm.text"></p>
-                            <div class="pt-0.5 flex justify-end">
-                              <button type="button" @click="openReplyModal(comm)" class="text-[10px] text-brand-600 font-bold hover:underline flex items-center space-x-0.5">
-                                <i data-lucide="reply" class="w-3 h-3"></i>
-                                <span>Balas</span>
-                              </button>
-                            </div>
+                            <p class="text-slate-700" x-text="comm.text"></p>
                           </div>
                         </template>
                         <template x-if="getCommentsForChain(chain.chain_id).length === 0">
-                          <div class="py-4 text-center text-[11px] text-slate-400 italic bg-white/70 rounded-xl border border-slate-100">
-                            Belum ada komentar publik pada utas ini.
-                          </div>
+                          <div class="py-2 text-center text-[10px] text-slate-400 italic">Belum ada komentar publik pada utas ini.</div>
                         </template>
                       </div>
                     </div>
-
-                  </div>
-                </template>
-              </div>
-            </template>
-          </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </template>
         </div>
 
-        <!-- Footer Ramping Proporsional (Kloning Ringkas di Kiri, Tutup di Kanan) -->
-        <div class="flex items-center justify-between pt-3.5 mt-2 border-t border-slate-100">
+        <!-- Footer Modal (Flex: 0 0 auto; Sticky di Bawah) -->
+        <div class="flex items-center justify-between bg-white border-t border-slate-100" style="flex: 0 0 auto; position: sticky; bottom: 0; background: #fff; z-index: 10; padding: 12px; border-top: 1px solid #eee;">
           <div class="flex items-center space-x-2">
             <template x-if="postDetailModal.post">
-              <button @click="recyclePostIntoComposer(postDetailModal.post); postDetailModal.show = false;" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-medium transition flex items-center space-x-1.5" title="Kloning data utas ini ke composer">
+              <button @click="recyclePostIntoComposer(postDetailModal.post); postDetailModal.show = false;" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5" title="Kloning data utas ini ke composer">
                 <i data-lucide="repeat" class="w-3.5 h-3.5 text-slate-500"></i>
                 <span>Kloning</span>
               </button>
             </template>
           </div>
 
-          <button @click="postDetailModal.show = false" class="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition">
-            Tutup
-          </button>
+          <div class="flex items-center space-x-2">
+            <button @click="postDetailModal.show = false" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition">
+              Tutup
+            </button>
+            <template x-if="postDetailModal.post && !isPostLocked(postDetailModal.post)">
+              <button @click="editPost(postDetailModal.post); postDetailModal.show = false;" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm">
+                <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                <span x-text="postDetailModal.post.status === 'Draft' ? 'Lanjut Edit Draf' : 'Edit Jadwal'"></span>
+              </button>
+            </template>
+          </div>
         </div>
+
       </div>
     </div>
 
@@ -4384,6 +4757,32 @@
         viralLibrary: [],
         postAnalytics: [],
         postComments: [],
+        draftAcc: [],
+        draftAccSearch: '',
+        draftAccStatusFilter: 'all',
+        draftActionLoadingId: '',
+        draftRevisionModal: { show: false, draftId: '', notes: '', loading: false },
+        draftAccModal: {
+          show: false,
+          isEdit: false,
+          loading: false,
+          data: {
+            draft_id: '',
+            title: '',
+            product_id: '',
+            viral_id: '',
+            approval_status: 'Pending',
+            revision_notes: '',
+            chains: [
+              { sequence_order: 1, text_content: '', media_urls: [] },
+              { sequence_order: 2, text_content: '', media_urls: [] }
+            ]
+          },
+          chains: [
+            { sequence_order: 1, text_content: '', media_urls: [] },
+            { sequence_order: 2, text_content: '', media_urls: [] }
+          ]
+        },
         syncingCommentsPostId: '',
         settings: {},
 
@@ -4429,7 +4828,7 @@
         
         toast: { show: false, message: '', type: 'success' },
         confirmModal: { show: false, title: '', message: '', onConfirm: () => {} },
-        accountModal: { show: false, isEdit: false, accountId: '', token: '', category: 'General', account_persona: '', loading: false },
+        accountModal: { show: false, isEdit: false, accountId: '', token: '', category: 'General', account_persona: '', window_start: '08:00', window_end: '22:00', loading: false },
         productModal: { show: false, isEdit: false, data: { product_id: '', title: '', category: '', price: 0, description: '', affiliate_link: '', dashboard_url: '', commission_pct: 0, shopee_commission_pct: 0, cover_url: '', assigned_account_ids: [] }, loading: false },
         productMediaModal: { show: false, product: null, selectedFiles: [], uploading: false, uploadPercent: 0, progressText: '', showUploadForm: false },
         mediaPickerModal: { show: false, targetChainIndex: 0, selectedMediaIds: [], openBatchIds: [] },
@@ -4657,7 +5056,7 @@
         restoreActiveTab: function() {
           try {
             var savedTab = localStorage.getItem('threadchain_active_tab');
-            var validTabs = ['dashboard', 'all_posts', 'composer', 'inbox_comments', 'daily_queue', 'products', 'viral_library', 'accounts', 'settings', 'training_memory', 'prompt_editor'];
+            var validTabs = ['dashboard', 'all_posts', 'composer', 'draft_acc', 'inbox_comments', 'daily_queue', 'products', 'viral_library', 'accounts', 'settings', 'training_memory', 'prompt_editor'];
             if (savedTab && validTabs.indexOf(savedTab) !== -1) {
               this.currentTab = savedTab;
             }
@@ -4692,6 +5091,7 @@
                 self.viralLibrary = d.viralLibrary || [];
                 self.postAnalytics = d.postAnalytics || [];
                 self.postComments = d.postComments || [];
+                self.draftAcc = d.draftAcc || [];
                 self.settings = d.settings || {};
               } else {
                 self.showToast(res ? res.message : 'Gagal memuat data', 'error');
@@ -4711,6 +5111,7 @@
             case 'daily_queue': return 'Antrean Produk Belum Diposting Hari Ini';
             case 'all_posts': return 'Kontrol Postingan';
             case 'composer': return 'Composer Utas Threads';
+            case 'draft_acc': return 'Draft Mode ACC (Review & Persetujuan)';
             case 'inbox_comments': return 'Inbox Interaksi Komentar';
             case 'products': return 'Katalog Produk Affiliate';
             case 'viral_library': return 'Bank Ide Konten Viral';
@@ -4726,6 +5127,7 @@
             case 'daily_queue': return 'Daftar produk prioritas yang perlu dirotasi agar konsisten mendapatkan traffic harian';
             case 'all_posts': return 'Kelola seluruh status rilis, jadwal, & eksekusi instan';
             case 'composer': return 'Susun rantai pesan multi-bubble & sematkan spill link';
+            case 'draft_acc': return 'Pusat peninjauan materi sebelum dijadwalkan oleh tim operator';
             case 'inbox_comments': return 'Tanggapi pertanyaan leads & calon pembeli';
             case 'products': return 'Kelola tautan affiliate, komisi, & aset batch media';
             case 'viral_library': return 'Inspirasi winning post yang siap digunakan';
@@ -5191,7 +5593,7 @@
                            hook.indexOf(q) !== -1;
               if (!matchQ) return false;
             }
-            if (status === 'all') return true;
+            if (status === 'all') return p.status !== 'Draft';
             if (status === 'Waiting Views') return self.isWaitingViewsPost(p);
             return p.status === status;
           }).length;
@@ -5213,7 +5615,7 @@
             if (!self.isPostInDateRange(p, dateRange)) return false;
             var matchStatus = false;
             if (status === 'all') {
-              matchStatus = true;
+              matchStatus = (p.status !== 'Draft');
             } else if (status === 'Waiting Views') {
               matchStatus = self.isWaitingViewsPost(p);
             } else {
@@ -5762,6 +6164,316 @@
           return this.filteredProductsList.slice(start, start + this.productsPerPage);
         },
 
+        // --- DRAFT MODE ACC METHODS ---
+        get pendingDraftAccCount() {
+          return this.draftAcc.filter(function(d) {
+            return (d.approval_status || 'Pending') === 'Pending';
+          }).length;
+        },
+
+        getDraftAccStatusCount: function(status) {
+          return this.draftAcc.filter(function(d) {
+            return d.approval_status === status;
+          }).length;
+        },
+
+        get filteredDraftAccList() {
+          var status = this.draftAccStatusFilter;
+          var q = (this.draftAccSearch || '').toLowerCase().trim();
+          var self = this;
+          return this.draftAcc.filter(function(d) {
+            if (status !== 'all' && d.approval_status !== status) return false;
+            if (q) {
+              var prod = self.getProduct(d.product_id);
+              var chains = self.parseDraftChains(d.chains_json);
+              var c1 = chains[0] ? (chains[0].text_content || '') : '';
+              var c2 = chains[1] ? (chains[1].text_content || '') : '';
+              var matchQ = (d.title && d.title.toLowerCase().indexOf(q) !== -1) ||
+                           (prod.title && prod.title.toLowerCase().indexOf(q) !== -1) ||
+                           c1.toLowerCase().indexOf(q) !== -1 ||
+                           c2.toLowerCase().indexOf(q) !== -1;
+              if (!matchQ) return false;
+            }
+            return true;
+          });
+        },
+
+        parseDraftChains: function(chainsJson) {
+          try {
+            var parsed = JSON.parse(chainsJson || '[]');
+            return Array.isArray(parsed) ? parsed : [];
+          } catch (e) {
+            return [];
+          }
+        },
+
+        getDraftChain: function(draft, index) {
+          var chains = this.parseDraftChains(draft.chains_json);
+          return chains[index] || { sequence_order: index + 1, text_content: '', media_urls: [] };
+        },
+
+        getViralItem: function(viralId) {
+          return this.viralLibrary.find(function(v) { return v.viral_id === viralId; }) || {};
+        },
+
+        openViralReferenceDetail: function(viralId) {
+          var item = this.getViralItem(viralId);
+          if (item && item.viral_id) {
+            this.openViralDetail(item);
+          } else {
+            this.showToast('Data referensi viral tidak ditemukan', 'error');
+          }
+        },
+
+        getDraftAccStatusBadgeClass: function(status) {
+          switch (status) {
+            case 'Approved': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+            case 'Revision': return 'bg-amber-50 text-amber-700 border-amber-200';
+            case 'Rejected': return 'bg-rose-50 text-rose-700 border-rose-200';
+            default: return 'bg-amber-50 text-amber-800 border-amber-200';
+          }
+        },
+
+        getProductMediaForDraftModal: function() {
+          var pId = this.draftAccModal.data.product_id;
+          if (!pId) return [];
+          return this.mediaFiles.filter(function(m) { return m.product_id === pId; });
+        },
+
+        isDraftMediaSelected: function(chainIdx, mediaUrl) {
+          var chain = this.draftAccModal.chains[chainIdx];
+          if (!chain || !Array.isArray(chain.media_urls)) return false;
+          return chain.media_urls.indexOf(mediaUrl) !== -1;
+        },
+
+        toggleDraftModalMedia: function(chainIdx, mediaUrl) {
+          var chain = this.draftAccModal.chains[chainIdx];
+          if (!chain) return;
+          if (!Array.isArray(chain.media_urls)) chain.media_urls = [];
+          var idx = chain.media_urls.indexOf(mediaUrl);
+          if (idx !== -1) {
+            chain.media_urls.splice(idx, 1);
+          } else {
+            chain.media_urls.push(mediaUrl);
+          }
+        },
+
+        applyViralReferenceToDraftModal: function() {
+          var vId = this.draftAccModal.data.viral_id;
+          if (!vId) return;
+          var vItem = this.getViralItem(vId);
+          if (vItem) {
+            if (!this.draftAccModal.data.title) {
+              this.draftAccModal.data.title = 'Draf ACC: ' + vItem.title;
+            }
+            this.showToast('Acuan ide viral terpilih sebagai referensi bacaan tim.');
+          }
+        },
+
+        addDraftAccChain: function() {
+          this.draftAccModal.chains.push({
+            sequence_order: this.draftAccModal.chains.length + 1,
+            text_content: '',
+            media_urls: []
+          });
+          this.$nextTick(function() { lucide.createIcons(); });
+        },
+
+        removeDraftAccChain: function(idx) {
+          if (this.draftAccModal.chains.length <= 1) return;
+          this.draftAccModal.chains.splice(idx, 1);
+          this.$nextTick(function() { lucide.createIcons(); });
+        },
+
+        openAddDraftAccModal: function() {
+          this.draftAccModal.isEdit = false;
+          this.draftAccModal.loading = false;
+          this.draftAccModal.data = {
+            draft_id: '',
+            title: '',
+            product_id: '',
+            viral_id: '',
+            approval_status: 'Pending',
+            revision_notes: ''
+          };
+          this.draftAccModal.chains = [
+            { sequence_order: 1, text_content: '', media_urls: [] },
+            { sequence_order: 2, text_content: '', media_urls: [] }
+          ];
+          this.draftAccModal.show = true;
+          this.$nextTick(function() { lucide.createIcons(); });
+        },
+
+        openEditDraftAccModal: function(draft) {
+          this.draftAccModal.isEdit = true;
+          this.draftAccModal.loading = false;
+          this.draftAccModal.data = {
+            draft_id: draft.draft_id,
+            title: draft.title || '',
+            product_id: draft.product_id || '',
+            viral_id: draft.viral_id || '',
+            approval_status: draft.approval_status || 'Pending',
+            revision_notes: draft.revision_notes || ''
+          };
+          var existingChains = this.parseDraftChains(draft.chains_json);
+          this.draftAccModal.chains = existingChains.length > 0 ? existingChains.map(function(c, i) {
+            return {
+              sequence_order: i + 1,
+              text_content: c.text_content || c.content_text || '',
+              media_urls: c.media_urls || []
+            };
+          }) : [
+            { sequence_order: 1, text_content: '', media_urls: [] },
+            { sequence_order: 2, text_content: '', media_urls: [] }
+          ];
+          this.draftAccModal.show = true;
+          this.$nextTick(function() { lucide.createIcons(); });
+        },
+
+        submitSaveDraftAcc: function() {
+          if (!this.draftAccModal.data.title.trim()) {
+            this.showToast('Judul draf wajib diisi', 'error');
+            return;
+          }
+          if (this.draftAccModal.chains.length === 0 || !this.draftAccModal.chains[0].text_content.trim()) {
+            this.showToast('Teks Utas #1 tidak boleh kosong', 'error');
+            return;
+          }
+
+          this.draftAccModal.loading = true;
+          var self = this;
+          var cleanChains = this.draftAccModal.chains.map(function(c, idx) {
+            return {
+              sequence_order: idx + 1,
+              text_content: c.text_content || '',
+              media_urls: c.media_urls || []
+            };
+          });
+
+          var payload = {
+            draft_id: this.draftAccModal.data.draft_id,
+            title: this.draftAccModal.data.title,
+            product_id: this.draftAccModal.data.product_id,
+            viral_id: this.draftAccModal.data.viral_id,
+            approval_status: this.draftAccModal.data.approval_status || 'Pending',
+            revision_notes: this.draftAccModal.data.revision_notes || '',
+            chains: cleanChains
+          };
+
+          google.script.run
+            .withSuccessHandler(function(res) {
+              self.draftAccModal.loading = false;
+              if (res && res.ok) {
+                self.showToast(res.message);
+                self.draftAccModal.show = false;
+                self.refreshAllData();
+              } else {
+                self.showToast(res ? res.message : 'Gagal menyimpan draf', 'error');
+              }
+            })
+            .withFailureHandler(function(err) {
+              self.draftAccModal.loading = false;
+              self.showToast('Error: ' + err.message, 'error');
+            })
+            .saveDraftAcc(payload);
+        },
+
+        submitDraftApprovalAction: function(draftId, status, notes) {
+          this.draftActionLoadingId = draftId;
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function(res) {
+              self.draftActionLoadingId = '';
+              if (res && res.ok) {
+                self.showToast(res.message);
+                self.refreshAllData();
+              } else {
+                self.showToast(res ? res.message : 'Gagal memperbarui status draf', 'error');
+              }
+            })
+            .withFailureHandler(function(err) {
+              self.draftActionLoadingId = '';
+              self.showToast('Error: ' + err.message, 'error');
+            })
+            .updateDraftApprovalStatus(draftId, status, notes || '');
+        },
+
+        openDraftRevisionModal: function(draft) {
+          this.draftRevisionModal.draftId = draft.draft_id;
+          this.draftRevisionModal.notes = draft.revision_notes || '';
+          this.draftRevisionModal.loading = false;
+          this.draftRevisionModal.show = true;
+          this.$nextTick(function() { lucide.createIcons(); });
+        },
+
+        submitDraftRevision: function() {
+          var notes = (this.draftRevisionModal.notes || '').trim();
+          if (!notes) {
+            this.showToast('Catatan revisi wajib diisi!', 'error');
+            return;
+          }
+          this.draftRevisionModal.loading = true;
+          var self = this;
+          var draftId = this.draftRevisionModal.draftId;
+
+          google.script.run
+            .withSuccessHandler(function(res) {
+              self.draftRevisionModal.loading = false;
+              if (res && res.ok) {
+                self.showToast(res.message);
+                self.draftRevisionModal.show = false;
+                self.refreshAllData();
+              } else {
+                self.showToast(res ? res.message : 'Gagal mengajukan revisi', 'error');
+              }
+            })
+            .withFailureHandler(function(err) {
+              self.draftRevisionModal.loading = false;
+              self.showToast('Error: ' + err.message, 'error');
+            })
+            .updateDraftApprovalStatus(draftId, 'Revision', notes);
+        },
+
+        promptDeleteDraftAcc: function(draftId) {
+          var self = this;
+          this.confirmModal = {
+            show: true,
+            title: 'Hapus Draf Konten ACC?',
+            message: 'Draf ini akan dihapus permanen dari sistem review.',
+            onConfirm: function() {
+              google.script.run
+                .withSuccessHandler(function(res) {
+                  if (res && res.ok) {
+                    self.showToast(res.message);
+                    self.refreshAllData();
+                  } else {
+                    self.showToast(res ? res.message : 'Gagal menghapus draf', 'error');
+                  }
+                })
+                .deleteDraftAcc(draftId);
+            }
+          };
+        },
+
+        loadDraftAccIntoComposer: function(draft) {
+          this.resetComposer();
+          var chains = this.parseDraftChains(draft.chains_json);
+          this.composer.product_id = draft.product_id || '';
+
+          if (chains.length > 0) {
+            this.composer.chains = chains.map(function(c) {
+              return {
+                content_text: c.text_content || '',
+                product_ids: draft.product_id ? [draft.product_id] : [],
+                media_ids: c.media_urls || []
+              };
+            });
+          }
+
+          this.switchTab('composer');
+          this.showToast('Draf yang telah disetujui dimuat ke Composer. Silakan pilih akun dan waktu peluncuran!');
+        },
+
         isAccountActive: function(acc) {
           if (!acc) return false;
           return acc.is_active === true || String(acc.is_active).toUpperCase() === 'TRUE';
@@ -5932,6 +6644,13 @@
           return this.posts.filter(function(p) {
             return p.status !== 'Draft / Review' && p.status !== 'Draft / Penangkaran';
           });
+        },
+
+        get pipelinePostsCount() {
+          return this.posts.filter(function(p) {
+            var st = p.status || '';
+            return st !== 'Draft' && st.indexOf('Draft') === -1;
+          }).length;
         },
 
         get publishedPosts() {
@@ -6410,6 +7129,23 @@
           });
         },
 
+        formatTimeOnly: function(val, fallback) {
+          if (!val) return fallback || '08:00';
+          var s = String(val).trim();
+          var m = s.match(/(\d{1,2}):(\d{2})/);
+          if (m) {
+            return ('0' + m[1]).slice(-2) + ':' + m[2];
+          }
+          return fallback || '08:00';
+        },
+
+        formatAccountWindow: function(acc) {
+          if (!acc) return '08:00 - 22:00';
+          var start = this.formatTimeOnly(acc.window_start, '08:00');
+          var end = this.formatTimeOnly(acc.window_end, '22:00');
+          return start + ' - ' + end;
+        },
+
         formatRupiah: function(num) {
           return 'Rp ' + Number(num || 0).toLocaleString('id-ID');
         },
@@ -6490,7 +7226,10 @@
           this.accountModal.token = '';
           this.accountModal.category = 'General';
           this.accountModal.account_persona = '';
+          this.accountModal.window_start = '08:00';
+          this.accountModal.window_end = '22:00';
           this.accountModal.show = true;
+          this.$nextTick(function() { lucide.createIcons(); });
         },
 
         openEditAccountModal: function(acc) {
@@ -6499,7 +7238,10 @@
           this.accountModal.token = '';
           this.accountModal.category = acc.category || 'General';
           this.accountModal.account_persona = acc.account_persona || '';
+          this.accountModal.window_start = this.formatTimeOnly(acc.window_start, '08:00');
+          this.accountModal.window_end = this.formatTimeOnly(acc.window_end, '22:00');
           this.accountModal.show = true;
+          this.$nextTick(function() { lucide.createIcons(); });
         },
 
         submitAccountForm: function() {
@@ -6510,7 +7252,7 @@
               .withSuccessHandler(function(res) {
                 self.accountModal.loading = false;
                 if (res.ok) {
-                  self.showToast('Persona dan kategori akun berhasil diperbarui!');
+                  self.showToast('Data akun & jam jendela berhasil diperbarui!');
                   self.accountModal.show = false;
                   self.refreshAllData();
                 } else {
@@ -6524,7 +7266,9 @@
               .updateAccountDetails({
                 account_id: this.accountModal.accountId,
                 category: this.accountModal.category,
-                account_persona: this.accountModal.account_persona
+                account_persona: this.accountModal.account_persona,
+                window_start: this.accountModal.window_start || '08:00',
+                window_end: this.accountModal.window_end || '22:00'
               });
           } else {
             if (!this.accountModal.token.trim()) {
@@ -6547,7 +7291,13 @@
                 self.accountModal.loading = false;
                 self.showToast('Validasi gagal: ' + err.message, 'error');
               })
-              .addOrSyncAccount(this.accountModal.token.trim(), this.accountModal.category, this.accountModal.account_persona);
+              .addOrSyncAccount(
+                this.accountModal.token.trim(),
+                this.accountModal.category,
+                this.accountModal.account_persona,
+                this.accountModal.window_start || '08:00',
+                this.accountModal.window_end || '22:00'
+              );
           }
         },
 
