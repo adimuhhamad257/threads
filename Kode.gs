@@ -545,7 +545,25 @@ function getInitialData() {
         view_check_until: root.view_check_until || (threads[1] ? threads[1].view_check_until : ''),
         is_evergreen: root.is_evergreen || 'FALSE',
         error_log: combinedErrorLog,
-        created_at: root.created_at || ''
+        created_at: root.created_at || '',
+        chains: threads.map(function(th) {
+          var pMed = [];
+          try {
+            pMed = typeof th.media_ids === 'string' ? JSON.parse(th.media_ids || '[]') : (th.media_ids || []);
+          } catch(e) { pMed = []; }
+          return {
+            chain_id: th.post_id,
+            post_id: curGId,
+            chain_group_id: curGId,
+            sequence_order: Number(th.sequence_order || 1),
+            content_text: th.content_text || '',
+            media_ids: pMed,
+            reply_to_meta_id: th.reply_to_meta_id || '',
+            threads_post_id: th.threads_post_id || '',
+            permalink: th.permalink || '',
+            published_at: th.published_at || ''
+          };
+        })
       };
       posts.push(postObj);
     }
@@ -2973,11 +2991,38 @@ function archiveSingleThreadFromQueue(ss, postId, status, errorMsg) {
  */
 function executeSingleMetaThreadPublish(threadObj, account, parentMetaId, mediaRows) {
   try {
+    // Parser: Ekstrak raw media_ids menjadi array of strings murni (hanya ID media) SEBELUM diproses
+    var rawMedia = threadObj.media_ids;
+    if (typeof rawMedia === 'string' && rawMedia.trim()) {
+      try {
+        rawMedia = JSON.parse(rawMedia);
+      } catch (e) {
+        rawMedia = rawMedia.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+      }
+    }
+    if (!Array.isArray(rawMedia)) {
+      rawMedia = rawMedia ? [rawMedia] : [];
+    }
+
     var mediaList = [];
-    if (Array.isArray(threadObj.media_ids)) {
-      mediaList = threadObj.media_ids;
-    } else if (typeof threadObj.media_ids === 'string' && threadObj.media_ids.trim()) {
-      try { mediaList = JSON.parse(threadObj.media_ids); } catch (e) { mediaList = []; }
+    for (var mi = 0; mi < rawMedia.length; mi++) {
+      var mItem = rawMedia[mi];
+      if (!mItem) continue;
+      if (typeof mItem === 'object' && mItem !== null) {
+        var extId = mItem.media_id ? String(mItem.media_id).trim() : (mItem.url || mItem.cloudinary_url || '');
+        if (extId) mediaList.push(extId);
+      } else if (typeof mItem === 'string') {
+        var strId = mItem.trim();
+        if (strId) mediaList.push(strId);
+      }
+    }
+
+    if (!mediaRows || mediaRows.length <= 1) {
+      try {
+        var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+        var mSheet = ss.getSheetByName('Media_Files');
+        if (mSheet) mediaRows = mSheet.getDataRange().getValues();
+      } catch (eRows) {}
     }
 
     var publishedPostId = '';
@@ -2985,7 +3030,7 @@ function executeSingleMetaThreadPublish(threadObj, account, parentMetaId, mediaR
     var cleanParentId = parentMetaId ? String(parentMetaId).trim() : '';
 
     if (mediaList.length > 1) {
-      // Karusel
+      // Karusel: reply_to_id HANYA dipasang di carouselPayload (Parent), DILARANG di cPayload (Child)
       var childContainerIds = [];
       for (var m = 0; m < mediaList.length; m++) {
         var mObj = findMediaById(mediaList[m], mediaRows);
@@ -3018,10 +3063,11 @@ function executeSingleMetaThreadPublish(threadObj, account, parentMetaId, mediaR
       }
 
       var parentContainerId = createMetaContainer(account.meta_user_id, account.access_token, carouselPayload);
+      checkMetaContainerStatus(parentContainerId, account.access_token, 15);
       publishedPostId = publishMetaContainer(account.meta_user_id, parentContainerId, account.access_token, false);
 
     } else if (mediaList.length === 1) {
-      // Single Image / Video
+      // Single Image / Video: HANYA sPayload.reply_to_id jika ada parentMetaId
       var singleMedia = findMediaById(mediaList[0], mediaRows);
       var isSingleVid = (singleMedia && singleMedia.media_type === 'VIDEO');
       var sPayload = {
@@ -3039,7 +3085,7 @@ function executeSingleMetaThreadPublish(threadObj, account, parentMetaId, mediaR
       publishedPostId = publishMetaContainer(account.meta_user_id, singleContainerId, account.access_token, true);
 
     } else {
-      // Teks Murni
+      // Teks Murni: HANYA tPayload.reply_to_id jika ada parentMetaId
       var tPayload = {
         media_type: 'TEXT',
         text: textContent
@@ -3181,12 +3227,25 @@ function cleanupTerminalQueuePosts(ss) {
     var headers = qData[0];
     var stCol = headers.indexOf('status');
     if (stCol === -1) stCol = 8;
+    var pIdCol = headers.indexOf('post_id');
+    if (pIdCol === -1) pIdCol = 0;
+
+    var pData = pSheet.getDataRange().getValues();
+    var existingPIds = {};
+    for (var p = 1; p < pData.length; p++) {
+      var existPid = String(pData[p][0] || '');
+      if (existPid) existingPIds[existPid] = true;
+    }
 
     var rowsToDelete = [];
     for (var r = 1; r < qData.length; r++) {
       var st = String(qData[r][stCol] || '').trim();
+      var curPId = String(qData[r][pIdCol] || '');
       if (st === 'Published' || st === 'Closed' || st.indexOf('Failed') === 0) {
-        pSheet.appendRow(qData[r]);
+        if (!existingPIds[curPId]) {
+          pSheet.appendRow(qData[r]);
+          existingPIds[curPId] = true;
+        }
         rowsToDelete.push(r + 1);
       }
     }
@@ -3195,6 +3254,7 @@ function cleanupTerminalQueuePosts(ss) {
       for (var d = 0; d < rowsToDelete.length; d++) {
         qSheet.deleteRow(rowsToDelete[d]);
       }
+      SpreadsheetApp.flush();
     }
   } catch (e) {
     Logger.log('cleanupTerminalQueuePosts error: ' + e.message);
@@ -3344,16 +3404,22 @@ function processPublishingQueue() {
         // Waktu sekarang >= jadwal_terbit DAN keterlambatan <= 5 menit: Siap rilis!
         // Untuk Utas #2 dan seterusnya, periksa ketersediaan reply_to_meta_id
         if (seq > 1 && !replyMetaId) {
-          // Cari parent di Published_Posts
+          // Cari parent di Published_Posts secara mundur (prioritas entri terbaru)
           var pubRows = readSheetAsJson('Published_Posts');
-          var prevPub = pubRows.find(function(pb) {
-            return String(pb.chain_group_id || pb.post_id) === rowGId && Number(pb.sequence_order) === seq - 1;
-          });
+          var prevPub = null;
+          for (var pbIdx = pubRows.length - 1; pbIdx >= 0; pbIdx--) {
+            var pb = pubRows[pbIdx];
+            if (String(pb.chain_group_id || pb.post_id) === rowGId && Number(pb.sequence_order) === seq - 1 && pb.threads_post_id) {
+              prevPub = pb;
+              break;
+            }
+          }
 
           if (prevPub && prevPub.threads_post_id) {
             replyMetaId = String(prevPub.threads_post_id).trim();
             qSheet.getRange(r + 1, replyCol + 1).setValue(replyMetaId);
             qData[r][replyCol] = replyMetaId;
+            SpreadsheetApp.flush();
             shouldPublish = true;
           } else {
             // Induk belum terbit atau gagal -> Abort utas sambungan ini & arsipkan ke Published_Posts
@@ -3467,11 +3533,13 @@ function processPublishingQueue() {
           var newPermalink = pubResult.permalink;
           var newPubAt = pubResult.published_at || new Date().toISOString();
 
-          // SUNTIKKAN threads_post_id ke reply_to_meta_id utas berikutnya (seq + 1) di Queue_Posts seketika
+          // SUNTIKKAN threads_post_id ke reply_to_meta_id utas berikutnya (seq + 1) di Queue_Posts seketika dan flush ke sheet
           for (var n = 1; n < qData.length; n++) {
             if (String(qData[n][gIdCol] || qData[n][pIdCol]) === rowGId && Number(qData[n][seqCol]) === seq + 1) {
-              qSheet.getRange(n + 1, replyCol + 1).setValue(newThreadsPostId);
+              var barisUtasDua = n + 1;
+              qSheet.getRange(barisUtasDua, replyCol + 1).setValue(newThreadsPostId);
               qData[n][replyCol] = newThreadsPostId;
+              SpreadsheetApp.flush();
               break;
             }
           }
@@ -3617,32 +3685,28 @@ function createMediaSnapshot(rawMediaList, mediaRows) {
 
 function findMediaById(mediaId, mediaRows) {
   if (!mediaId) return null;
-  // Jika berupa objek snapshot permanen
-  if (typeof mediaId === 'object' && mediaId !== null) {
-    var mUrl = mediaId.url || mediaId.cloudinary_url || '';
-    var isVid = (mediaId.type && String(mediaId.type).toUpperCase() === 'VIDEO') ||
-                (mediaId.media_type && String(mediaId.media_type).toUpperCase() === 'VIDEO') ||
-                /\.(mp4|mov|webm)$/i.test(mUrl) ||
-                (mUrl.indexOf('/video/') !== -1);
-    return {
-      media_type: isVid ? 'VIDEO' : 'IMAGE',
-      cloudinary_url: mUrl
-    };
-  }
-  // Jika berupa URL langsung (misal dari referensi Pustaka Viral)
-  if (typeof mediaId === 'string' && (mediaId.indexOf('http://') === 0 || mediaId.indexOf('https://') === 0)) {
-    var isVideo = /\.(mp4|mov|webm)$/i.test(mediaId);
+  var idStr = typeof mediaId === 'object' && mediaId !== null ? (mediaId.media_id || mediaId.url || mediaId.cloudinary_url || '') : String(mediaId).trim();
+  if (!idStr) return null;
+
+  // Jika berupa URL langsung (Cloudinary CDN URL)
+  if (idStr.indexOf('http://') === 0 || idStr.indexOf('https://') === 0) {
+    var isVideo = /\.(mp4|mov|webm)$/i.test(idStr) || (idStr.indexOf('/video/') !== -1);
     return {
       media_type: isVideo ? 'VIDEO' : 'IMAGE',
-      cloudinary_url: mediaId
+      cloudinary_url: idStr
     };
   }
-  for (var i = 1; i < mediaRows.length; i++) {
-    if (String(mediaRows[i][0]) === String(mediaId)) {
-      return {
-        media_type: mediaRows[i][3],
-        cloudinary_url: mediaRows[i][4]
-      };
+
+  // Cari berdasarkan ID file di mediaRows
+  if (mediaRows) {
+    for (var i = 1; i < mediaRows.length; i++) {
+      if (String(mediaRows[i][0]).trim() === idStr) {
+        var isVid = String(mediaRows[i][3] || '').toUpperCase() === 'VIDEO' || /\.(mp4|mov|webm)$/i.test(mediaRows[i][4] || '');
+        return {
+          media_type: isVid ? 'VIDEO' : 'IMAGE',
+          cloudinary_url: mediaRows[i][4]
+        };
+      }
     }
   }
   return null;

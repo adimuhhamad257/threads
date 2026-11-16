@@ -6735,8 +6735,41 @@
           return this.products.find(function(p) { return p.product_id === id; }) || {};
         },
 
+        normalizeMediaIds: function(rawMedia) {
+          if (!rawMedia) return [];
+          var arr = [];
+          if (Array.isArray(rawMedia)) {
+            arr = rawMedia;
+          } else if (typeof rawMedia === 'string') {
+            try {
+              arr = JSON.parse(rawMedia);
+            } catch (e) {
+              arr = rawMedia.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+            }
+          }
+          if (!Array.isArray(arr)) return [];
+          return arr.map(function(item) {
+            if (typeof item === 'object' && item !== null) {
+              return item.media_id || item.url || item.cloudinary_url || item;
+            }
+            return item;
+          }).filter(Boolean);
+        },
+
         getPostChains: function(postId) {
-          return this.postChains.filter(function(c) { return c.post_id === postId; });
+          var targetId = String(postId || '').trim();
+          if (!targetId) return [];
+          var post = this.posts.find(function(p) {
+            return String(p.post_id || '').trim() === targetId || String(p.chain_group_id || '').trim() === targetId;
+          });
+          if (post && Array.isArray(post.chains) && post.chains.length > 0) {
+            return post.chains;
+          }
+          var list = this.postChains.filter(function(c) {
+            return String(c.post_id || '').trim() === targetId || String(c.chain_group_id || '').trim() === targetId;
+          });
+          list.sort(function(a, b) { return Number(a.sequence_order || 1) - Number(b.sequence_order || 1); });
+          return list;
         },
 
         getFirstChainHook: function(postId) {
@@ -7033,7 +7066,9 @@
         },
 
         recyclePostIntoComposer: function(post) {
+          var targetId = String(post.chain_group_id || post.post_id || '').trim();
           this.composer.post_id = ''; // Postingan baru
+          this.composer.chain_group_id = '';
           this.composer.account_id = '';
           this.composer.account_ids = [];
           this.composer.product_id = post.product_id || '';
@@ -7045,22 +7080,22 @@
           now.setMinutes(now.getMinutes() + 15);
           this.composer.scheduled_at = now.toISOString().slice(0, 16);
 
-          var chains = this.getPostChains(post.post_id);
-          chains.sort(function(a, b) { return Number(a.sequence_order) - Number(b.sequence_order); });
+          var chains = this.getPostChains(targetId);
+          var self = this;
 
-          if (chains.length > 0) {
+          if (chains && chains.length > 0) {
             this.composer.chains = chains.map(function(c) {
-              var mList = [];
-              try { mList = JSON.parse(c.media_ids || '[]'); } catch (e) { mList = []; }
+              var mList = self.normalizeMediaIds(c.media_ids);
               return {
                 content_text: c.content_text || '',
-                media_ids: [].concat(mList)
+                media_ids: [].concat(mList),
+                product_ids: post.product_id ? [post.product_id] : []
               };
             });
           } else {
             this.composer.chains = [
-              { content_text: '', media_ids: [] },
-              { content_text: '', media_ids: [] }
+              { content_text: '', media_ids: [], product_ids: post.product_id ? [post.product_id] : [] },
+              { content_text: '', media_ids: [], product_ids: post.product_id ? [post.product_id] : [] }
             ];
           }
 
@@ -8328,35 +8363,42 @@
             this.showToast('Postingan yang sudah terbit telah dikunci dan tidak dapat diedit.', 'error');
             return;
           }
-          this.composer.post_id = post.post_id;
-          this.composer.account_id = post.account_id;
-          this.composer.account_ids = [post.account_id];
+          var targetId = String(post.chain_group_id || post.post_id || '').trim();
+          this.composer.post_id = targetId;
+          this.composer.chain_group_id = targetId;
+          this.composer.account_id = post.account_id || '';
+          this.composer.account_ids = post.account_id ? [post.account_id] : [];
           this.composer.product_id = post.product_id || '';
           this.composer.publishing_mode = post.publishing_mode || 'interval';
           this.composer.interval_minutes = Number(post.interval_minutes || 3);
           this.composer.target_views = Number(post.target_views || 100);
           this.composer.scheduled_at = this.isoToWibInputString(post.scheduled_at);
 
-          var chains = this.getPostChains(post.post_id);
-          chains.sort(function(a, b) { return Number(a.sequence_order) - Number(b.sequence_order); });
+          var chains = this.getPostChains(targetId);
+          var self = this;
 
-          if (chains.length > 0) {
+          if (chains && chains.length > 0) {
             this.composer.chains = chains.map(function(c) {
-              var mList = [];
-              try { mList = JSON.parse(c.media_ids || '[]'); } catch (e) { mList = []; }
+              var mList = self.normalizeMediaIds(c.media_ids);
+              var pList = [];
+              if (Array.isArray(c.product_ids) && c.product_ids.length > 0) {
+                pList = c.product_ids;
+              } else if (post.product_id) {
+                pList = [post.product_id];
+              }
               return {
-                chain_id: c.chain_id,
+                chain_id: c.chain_id || '',
                 content_text: c.content_text || '',
                 media_ids: mList,
-                product_ids: post.product_id ? [post.product_id] : [],
+                product_ids: pList,
                 threads_post_id: c.threads_post_id || '',
                 permalink: c.permalink || ''
               };
             });
           } else {
             this.composer.chains = [
-              { content_text: '', media_ids: [], product_ids: [] },
-              { content_text: '', media_ids: [], product_ids: [] }
+              { content_text: '', media_ids: [], product_ids: post.product_id ? [post.product_id] : [] },
+              { content_text: '', media_ids: [], product_ids: post.product_id ? [post.product_id] : [] }
             ];
           }
 
