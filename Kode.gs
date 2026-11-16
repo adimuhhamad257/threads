@@ -2753,7 +2753,7 @@ function publishMetaContainer(metaUserId, creationId, token, isMedia) {
 
   var pUrl = 'https://graph.threads.net/v1.0/me/threads_publish?access_token=' + encodeURIComponent(token);
   var payload = {
-    creation_id: creationId,
+    creation_id: String(creationId).trim(),
     access_token: token
   };
   var res = UrlFetchApp.fetch(pUrl, {
@@ -2982,6 +2982,7 @@ function executeSingleMetaThreadPublish(threadObj, account, parentMetaId, mediaR
 
     var publishedPostId = '';
     var textContent = String(threadObj.content_text || '').trim();
+    var cleanParentId = parentMetaId ? String(parentMetaId).trim() : '';
 
     if (mediaList.length > 1) {
       // Karusel
@@ -3012,8 +3013,8 @@ function executeSingleMetaThreadPublish(threadObj, account, parentMetaId, mediaR
         children: childContainerIds.join(',')
       };
       if (textContent) carouselPayload.text = textContent;
-      if (parentMetaId) {
-        carouselPayload.reply_to_id = parentMetaId;
+      if (cleanParentId) {
+        carouselPayload.reply_to_id = cleanParentId;
       }
 
       var parentContainerId = createMetaContainer(account.meta_user_id, account.access_token, carouselPayload);
@@ -3030,8 +3031,8 @@ function executeSingleMetaThreadPublish(threadObj, account, parentMetaId, mediaR
       else if (singleMedia) sPayload.image_url = singleMedia.cloudinary_url;
 
       if (textContent) sPayload.text = textContent;
-      if (parentMetaId) {
-        sPayload.reply_to_id = parentMetaId;
+      if (cleanParentId) {
+        sPayload.reply_to_id = cleanParentId;
       }
 
       var singleContainerId = createMetaContainer(account.meta_user_id, account.access_token, sPayload);
@@ -3043,8 +3044,8 @@ function executeSingleMetaThreadPublish(threadObj, account, parentMetaId, mediaR
         media_type: 'TEXT',
         text: textContent
       };
-      if (parentMetaId) {
-        tPayload.reply_to_id = parentMetaId;
+      if (cleanParentId) {
+        tPayload.reply_to_id = cleanParentId;
       }
 
       var textContainerId = createMetaContainer(account.meta_user_id, account.access_token, tPayload);
