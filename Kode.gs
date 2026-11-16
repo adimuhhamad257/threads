@@ -506,10 +506,19 @@ function getInitialData() {
       var allPublished = threads.every(function(th) { return th.status === 'Published'; });
       var anyProcessing = threads.some(function(th) { return th.status === 'Processing'; });
       var anyWaiting = threads.some(function(th) { return th.status === 'Waiting Views'; });
-      var anyFailed = threads.some(function(th) { return th.status === 'Failed'; });
+      var anyFailed = threads.some(function(th) { return String(th.status || '').indexOf('Failed') !== -1; });
       var anyClosed = threads.some(function(th) { return th.status === 'Closed'; });
 
       var overallStatus = root.status || 'Scheduled';
+      var combinedErrorLog = '';
+
+      for (var thErr = 0; thErr < threads.length; thErr++) {
+        if (threads[thErr].error_log) {
+          combinedErrorLog = threads[thErr].error_log;
+          break;
+        }
+      }
+
       if (allPublished) {
         overallStatus = 'Published';
       } else if (anyProcessing) {
@@ -517,7 +526,8 @@ function getInitialData() {
       } else if (anyWaiting) {
         overallStatus = 'Waiting Views';
       } else if (anyFailed && !anyWaiting) {
-        overallStatus = 'Failed';
+        var firstFailed = threads.find(function(th) { return String(th.status || '').indexOf('Failed') !== -1; });
+        overallStatus = firstFailed ? firstFailed.status : 'Failed - API Error';
       } else if (anyClosed && !anyWaiting) {
         overallStatus = 'Closed';
       }
@@ -534,6 +544,7 @@ function getInitialData() {
         scheduled_at: root.scheduled_at || '',
         view_check_until: root.view_check_until || (threads[1] ? threads[1].view_check_until : ''),
         is_evergreen: root.is_evergreen || 'FALSE',
+        error_log: combinedErrorLog,
         created_at: root.created_at || ''
       };
       posts.push(postObj);
@@ -2762,7 +2773,23 @@ function publishChainGroupNow(targetIdentifier, forceAllChains) {
     return { ok: true, message: 'Seluruh rantai utas berhasil diterbitkan berurutan ke Meta Threads!' };
 
   } catch (err) {
-    return { ok: false, message: err.message };
+    var errMsg = err.message || String(err);
+    if (curThread && curThread.post_id) {
+      updateThreadFieldInQueue(ss, curThread.post_id, 'status', 'Failed - API Error');
+      updateThreadFieldInQueue(ss, curThread.post_id, 'error_log', errMsg);
+    }
+    // Chain Abort: gagalkan seluruh utas sambungan berikutnya jika utas induk gagal
+    if (allGroupThreads && curThread) {
+      var failedSeqNum = Number(curThread.sequence_order || 1);
+      for (var abIdx = 0; abIdx < allGroupThreads.length; abIdx++) {
+        var targetAbTh = allGroupThreads[abIdx];
+        if (Number(targetAbTh.sequence_order) > failedSeqNum && !targetAbTh.threads_post_id) {
+          updateThreadFieldInQueue(ss, targetAbTh.post_id, 'status', 'Failed - Parent Error');
+          updateThreadFieldInQueue(ss, targetAbTh.post_id, 'error_log', 'Dibatalkan: Utas #' + failedSeqNum + ' gagal terbit (' + errMsg + ')');
+        }
+      }
+    }
+    return { ok: false, message: errMsg };
   }
 }
 
@@ -2939,7 +2966,9 @@ function moveThreadToPublished(ss, postId, threadsPostId, permalink, publishedAt
 }
 
 /**
- * CRITICAL WORKER 1: Queue Publisher Engine (Cronjob Pengirim Antrean Multi-Utas)
+ * CRITICAL WORKER: Queue Publisher Engine (Cronjob Pengirim Antrean Multi-Utas)
+ * Golden Standard: Jendela Toleransi 5 Menit, Looping Bebas Hambatan,
+ * Dinamika Reply & Chain Abort Protocol, Safe Reverse Row Deletion.
  */
 function processPublishingQueue() {
   var lock = LockService.getScriptLock();
@@ -2950,7 +2979,7 @@ function processPublishingQueue() {
     acquired = false;
   }
   if (!acquired) {
-    Logger.log('processPublishingQueue dilewati: lock tidak tersedia.');
+    Logger.log('processPublishingQueue dilewati: lock tidak tersedia setelah 25 detik.');
     return;
   }
 
@@ -2959,27 +2988,42 @@ function processPublishingQueue() {
     ensureNormalizedQueueColumns(ss);
     resetStalledProcessingPosts(ss);
 
-    var now = new Date();
-    var processedCount = 0;
     var qSheet = ss.getSheetByName('Queue_Posts');
-    if (!qSheet) return;
+    if (!qSheet || qSheet.getLastRow() <= 1) return;
 
-    var queueRows = qSheet.getDataRange().getValues();
-    if (queueRows.length <= 1) return;
-    var headers = queueRows[0];
+    var pSheet = ss.getSheetByName('Published_Posts');
+    if (!pSheet) pSheet = ss.insertSheet('Published_Posts');
+
+    var qData = qSheet.getDataRange().getValues();
+    if (qData.length <= 1) return;
+    var headers = qData[0];
 
     var pIdCol = headers.indexOf('post_id');
     var gIdCol = headers.indexOf('chain_group_id');
     var seqCol = headers.indexOf('sequence_order');
+    var accCol = headers.indexOf('account_id');
+    var prodCol = headers.indexOf('product_id');
+    var modeCol = headers.indexOf('publishing_mode');
+    var intCol = headers.indexOf('interval_minutes');
+    var tvCol = headers.indexOf('target_views');
     var stCol = headers.indexOf('status');
     var schedCol = headers.indexOf('scheduled_at');
     var checkCol = headers.indexOf('view_check_until');
-    var pubModeCol = headers.indexOf('publishing_mode');
-    var targetViewsCol = headers.indexOf('target_views');
     var replyCol = headers.indexOf('reply_to_meta_id');
+    var textCol = headers.indexOf('content_text');
+    var mediaCol = headers.indexOf('media_ids');
+    var thIdCol = headers.indexOf('threads_post_id');
+    var linkCol = headers.indexOf('permalink');
+    var pubAtCol = headers.indexOf('published_at');
+    var everCol = headers.indexOf('is_evergreen');
+    var errCol = headers.indexOf('error_log');
 
+    var accounts = readSheetAsJson('Accounts');
+    var mediaSheet = ss.getSheetByName('Media_Files');
+    var mediaRows = mediaSheet ? mediaSheet.getDataRange().getValues() : [];
     var analytics = readSheetAsJson('Post_Analytics');
     var sRows = readSheetAsJson('Settings');
+
     var fallbackHours = 24;
     var timeoutAction = 'auto_release';
     for (var si = 0; si < sRows.length; si++) {
@@ -2991,94 +3035,254 @@ function processPublishingQueue() {
       }
     }
 
-    for (var r = 1; r < queueRows.length; r++) {
-      if (processedCount >= 2) break; // Batasi 2 thread per eksekusi cron agar anti-timeout GAS
+    var now = new Date();
+    var nowMs = now.getTime();
+    var FIVE_MIN_MS = 5 * 60 * 1000;
 
-      var rowPId = String(queueRows[r][pIdCol] || '');
-      var rowGId = String(queueRows[r][gIdCol] || rowPId);
-      var seq = Number(queueRows[r][seqCol] || 1);
-      var status = String(queueRows[r][stCol] || '');
-      var schedAtStr = queueRows[r][schedCol];
-      var checkUntilStr = queueRows[r][checkCol];
-      var pubMode = String(queueRows[r][pubModeCol] || '');
-      var replyMetaId = String(queueRows[r][replyCol] || '');
+    // Lacak kelompok yang terputus (aborted) dalam siklus eksekusi ini
+    var abortedGroupIds = {};
+    // Lacak baris sukses yang akan dipindahkan dan dihapus dari Queue_Posts (1-based index)
+    var rowsToDelete = [];
 
-      var schedDate = schedAtStr ? new Date(schedAtStr) : null;
-      var checkUntilDate = checkUntilStr ? new Date(checkUntilStr) : null;
+    // Looping bebas hambatan melintasi seluruh baris antrean
+    for (var r = 1; r < qData.length; r++) {
+      var rowPId = String(qData[r][pIdCol] || '').trim();
+      var rowGId = String(qData[r][gIdCol] || rowPId).trim();
+      var seq = Number(qData[r][seqCol] || 1);
+      var status = String(qData[r][stCol] || '').trim();
+      var schedAtStr = qData[r][schedCol];
+      var checkUntilStr = qData[r][checkCol];
+      var pubMode = String(qData[r][modeCol] || '').trim();
+      var replyMetaId = String(qData[r][replyCol] || '').trim();
+      var accId = String(qData[r][accCol] || '').trim();
+
+      // Jika grup ini sudah diputus rantainya akibat kegagalan utas induk pada siklus ini:
+      if (abortedGroupIds[rowGId]) {
+        if (status === 'Scheduled' || status === 'Waiting Views') {
+          qSheet.getRange(r + 1, stCol + 1).setValue('Failed - Parent Error');
+          qSheet.getRange(r + 1, errCol + 1).setValue(abortedGroupIds[rowGId]);
+          qData[r][stCol] = 'Failed - Parent Error';
+          qData[r][errCol] = abortedGroupIds[rowGId];
+        }
+        continue;
+      }
+
+      // Hanya proses baris berstatus Scheduled atau Waiting Views
+      if (status !== 'Scheduled' && status !== 'Waiting Views') {
+        continue;
+      }
 
       var shouldPublish = false;
 
-      // 1. Logika Jadwal Interval / Utas #1
-      if (status === 'Scheduled' && schedDate) {
-        var overdueMs = now.getTime() - schedDate.getTime();
-        if (overdueMs > 3 * 3600000) {
-          qSheet.getRange(r + 1, stCol + 1).setValue('Failed');
-          qSheet.getRange(r + 1, headers.indexOf('error_log') + 1).setValue('Auto-fail: Jadwal terlewat > 3 jam.');
+      // 1. Evaluasi Status 'Scheduled' (Logika Jendela Toleransi 5 Menit)
+      if (status === 'Scheduled') {
+        var schedDate = schedAtStr ? new Date(schedAtStr) : null;
+        if (!schedDate || isNaN(schedDate.getTime())) {
           continue;
-        } else if (schedDate.getTime() <= now.getTime()) {
-          // Jika Utas #2+, pastikan reply_to_meta_id sudah terisi
-          if (seq > 1 && !replyMetaId) {
-            // Cek apakah Utas sebelumnya sudah terbit di Published_Posts
-            var pubRows = readSheetAsJson('Published_Posts');
-            var prevPub = pubRows.find(function(pb) {
-              return String(pb.chain_group_id) === rowGId && Number(pb.sequence_order) === seq - 1;
-            });
-            if (prevPub && prevPub.threads_post_id) {
-              replyMetaId = String(prevPub.threads_post_id);
-              qSheet.getRange(r + 1, replyCol + 1).setValue(replyMetaId);
-              shouldPublish = true;
-            }
-          } else {
-            shouldPublish = true;
-          }
         }
 
-      // 2. Logika Target Views (Waiting Views)
+        var schedMs = schedDate.getTime();
+        var diffMs = nowMs - schedMs;
+
+        // Jadwal belum tiba
+        if (nowMs < schedMs) {
+          continue;
+        }
+
+        // Keterlambatan sudah lebih dari 5 menit -> BATALKAN eksekusi otomatis
+        if (diffMs > FIVE_MIN_MS) {
+          var missedMsg = 'Jadwal terlewat > 5 menit (' + Math.round(diffMs / 60000) + ' mnt). Eksekusi otomatis dibatalkan.';
+          qSheet.getRange(r + 1, stCol + 1).setValue('Failed - Missed Schedule');
+          qSheet.getRange(r + 1, errCol + 1).setValue(missedMsg);
+          qData[r][stCol] = 'Failed - Missed Schedule';
+          qData[r][errCol] = missedMsg;
+
+          // Chain Abort: gagalkan seluruh utas sambungan pada grup ini
+          var abortMsg = 'Dibatalkan otomatis: Utas #' + seq + ' terlewat jadwal.';
+          abortedGroupIds[rowGId] = abortMsg;
+          abortSubsequentChainsInQueue(qSheet, qData, rowGId, seq, abortMsg, stCol, errCol, gIdCol, seqCol);
+          continue;
+        }
+
+        // Waktu sekarang >= jadwal_terbit DAN keterlambatan <= 5 menit: Siap rilis!
+        // Untuk Utas #2 dan seterusnya, periksa ketersediaan reply_to_meta_id
+        if (seq > 1 && !replyMetaId) {
+          // Cari parent di Published_Posts
+          var pubRows = readSheetAsJson('Published_Posts');
+          var prevPub = pubRows.find(function(pb) {
+            return String(pb.chain_group_id || pb.post_id) === rowGId && Number(pb.sequence_order) === seq - 1;
+          });
+
+          if (prevPub && prevPub.threads_post_id) {
+            replyMetaId = String(prevPub.threads_post_id).trim();
+            qSheet.getRange(r + 1, replyCol + 1).setValue(replyMetaId);
+            qData[r][replyCol] = replyMetaId;
+            shouldPublish = true;
+          } else {
+            // Induk belum terbit atau gagal -> Abort utas sambungan ini
+            var parentMissingMsg = 'Dibatalkan otomatis: Utas #' + (seq - 1) + ' belum terbit di Threads.';
+            qSheet.getRange(r + 1, stCol + 1).setValue('Failed - Parent Error');
+            qSheet.getRange(r + 1, errCol + 1).setValue(parentMissingMsg);
+            qData[r][stCol] = 'Failed - Parent Error';
+            qData[r][errCol] = parentMissingMsg;
+            abortedGroupIds[rowGId] = parentMissingMsg;
+            abortSubsequentChainsInQueue(qSheet, qData, rowGId, seq, parentMissingMsg, stCol, errCol, gIdCol, seqCol);
+            continue;
+          }
+        } else {
+          shouldPublish = true;
+        }
+
+      // 2. Evaluasi Status 'Waiting Views' (Target Views)
       } else if (status === 'Waiting Views' && pubMode === 'target_views') {
         var pubRows2 = readSheetAsJson('Published_Posts');
         var rootPub = pubRows2.find(function(pb) {
-          return String(pb.chain_group_id) === rowGId && Number(pb.sequence_order) === 1;
+          return String(pb.chain_group_id || pb.post_id) === rowGId && Number(pb.sequence_order) === 1;
         });
 
-        if (rootPub && rootPub.threads_post_id) {
-          if (!replyMetaId) {
-            replyMetaId = String(rootPub.threads_post_id);
+        if (!rootPub || !rootPub.threads_post_id) {
+          continue; // Menunggu Utas 1 selesai
+        }
+
+        // Pastikan reply_to_meta_id menunjuk ke utas tepat di atasnya
+        if (!replyMetaId) {
+          var prevPub2 = pubRows2.find(function(pb) {
+            return String(pb.chain_group_id || pb.post_id) === rowGId && Number(pb.sequence_order) === seq - 1;
+          });
+          if (prevPub2 && prevPub2.threads_post_id) {
+            replyMetaId = String(prevPub2.threads_post_id).trim();
             qSheet.getRange(r + 1, replyCol + 1).setValue(replyMetaId);
+            qData[r][replyCol] = replyMetaId;
+          } else {
+            replyMetaId = String(rootPub.threads_post_id).trim();
+            qSheet.getRange(r + 1, replyCol + 1).setValue(replyMetaId);
+            qData[r][replyCol] = replyMetaId;
+          }
+        }
+
+        var targetViews = Number(qData[r][tvCol] || 100);
+        var curViews = 0;
+        for (var a = 0; a < analytics.length; a++) {
+          if (String(analytics[a].threads_post_id) === String(rootPub.threads_post_id) || String(analytics[a].chain_id) === String(rootPub.threads_post_id)) {
+            curViews = Number(analytics[a].views_count || 0);
+            break;
+          }
+        }
+
+        var checkUntilDate = checkUntilStr ? new Date(checkUntilStr) : null;
+        if (!checkUntilDate || isNaN(checkUntilDate.getTime())) {
+          checkUntilDate = new Date(nowMs + fallbackHours * 3600000);
+          qSheet.getRange(r + 1, checkCol + 1).setValue(checkUntilDate.toISOString());
+          qData[r][checkCol] = checkUntilDate.toISOString();
+        }
+
+        var isTimeout = checkUntilDate && nowMs >= checkUntilDate.getTime();
+        if (curViews >= targetViews || (isTimeout && timeoutAction === 'auto_release')) {
+          shouldPublish = true;
+        } else if (isTimeout && timeoutAction !== 'auto_release') {
+          var closedMsg = 'Closed: Batas waktu target views berakhir, Utas #' + seq + ' batal rilis.';
+          qSheet.getRange(r + 1, stCol + 1).setValue('Closed');
+          qSheet.getRange(r + 1, errCol + 1).setValue(closedMsg);
+          qData[r][stCol] = 'Closed';
+          qData[r][errCol] = closedMsg;
+
+          // Pindahkan baris Closed ke Published_Posts dan hapus dari antrean
+          var closedRow = [].concat(qData[r]);
+          closedRow[stCol] = 'Closed';
+          closedRow[errCol] = closedMsg;
+          pSheet.appendRow(closedRow);
+          rowsToDelete.push(r + 1);
+          continue;
+        }
+      }
+
+      // 3. Eksekusi Pengiriman ke Meta Threads API
+      if (shouldPublish) {
+        var account = null;
+        for (var ac = 0; ac < accounts.length; ac++) {
+          if (String(accounts[ac].account_id) === accId) {
+            account = accounts[ac];
+            break;
+          }
+        }
+
+        var threadObj = {
+          post_id: rowPId,
+          chain_group_id: rowGId,
+          sequence_order: seq,
+          account_id: accId,
+          content_text: qData[r][textCol] || '',
+          media_ids: qData[r][mediaCol] || '[]',
+          reply_to_meta_id: replyMetaId
+        };
+
+        try {
+          if (!account || !account.access_token) {
+            throw new Error('Akun Threads atau Access Token tidak valid untuk akun ID: ' + accId);
           }
 
-          var targetViews = Number(queueRows[r][targetViewsCol] || 100);
-          var curViews = 0;
-          for (var a = 0; a < analytics.length; a++) {
-            if (String(analytics[a].chain_id) === String(rootPub.post_id) || String(analytics[a].chain_id) === String(rootPub.threads_post_id)) {
-              curViews = Number(analytics[a].views_count || 0);
+          var pubResult = executeSingleMetaThreadPublish(threadObj, account, replyMetaId, mediaRows);
+          if (!pubResult || !pubResult.ok || !pubResult.threads_post_id) {
+            throw new Error((pubResult && pubResult.message) ? pubResult.message : 'Meta API tidak mengembalikan ID postingan.');
+          }
+
+          var newThreadsPostId = pubResult.threads_post_id;
+          var newPermalink = pubResult.permalink;
+          var newPubAt = pubResult.published_at || new Date().toISOString();
+
+          // SUNTIKKAN threads_post_id ke reply_to_meta_id utas berikutnya (seq + 1) di Queue_Posts seketika
+          for (var n = 1; n < qData.length; n++) {
+            if (String(qData[n][gIdCol] || qData[n][pIdCol]) === rowGId && Number(qData[n][seqCol]) === seq + 1) {
+              qSheet.getRange(n + 1, replyCol + 1).setValue(newThreadsPostId);
+              qData[n][replyCol] = newThreadsPostId;
               break;
             }
           }
 
-          if (!checkUntilDate) {
-            checkUntilDate = new Date(now.getTime() + fallbackHours * 3600000);
-            qSheet.getRange(r + 1, checkCol + 1).setValue(checkUntilDate.toISOString());
-          }
+          // Catat data sukses & pindahkan ke Published_Posts
+          var publishedRowData = [].concat(qData[r]);
+          publishedRowData[stCol] = 'Published';
+          publishedRowData[thIdCol] = newThreadsPostId;
+          publishedRowData[linkCol] = newPermalink;
+          publishedRowData[pubAtCol] = newPubAt;
+          publishedRowData[errCol] = '';
+          if (replyMetaId) publishedRowData[replyCol] = replyMetaId;
 
-          var isTimeout = checkUntilDate && now.getTime() >= checkUntilDate.getTime();
-          if (curViews >= targetViews || (isTimeout && timeoutAction === 'auto_release')) {
-            shouldPublish = true;
-          } else if (isTimeout && timeoutAction !== 'auto_release') {
-            qSheet.getRange(r + 1, stCol + 1).setValue('Closed');
-            qSheet.getRange(r + 1, headers.indexOf('error_log') + 1).setValue('Closed: Target views tidak tercapai, Utas sambungan dibatalkan.');
-            moveThreadToPublished(ss, rowPId, '', '', '', replyMetaId);
-            continue;
-          }
+          pSheet.appendRow(publishedRowData);
+          rowsToDelete.push(r + 1);
+
+          Logger.log('Sukses terbit Utas #' + seq + ' (' + rowPId + ') -> Meta Post ID: ' + newThreadsPostId);
+
+        } catch (apiErr) {
+          // Tangani Error API Meta: Catat error asli dan ubah status menjadi Failed - API Error
+          var errMsg = apiErr.message || String(apiErr);
+          qSheet.getRange(r + 1, stCol + 1).setValue('Failed - API Error');
+          qSheet.getRange(r + 1, errCol + 1).setValue(errMsg);
+          qData[r][stCol] = 'Failed - API Error';
+          qData[r][errCol] = errMsg;
+
+          Logger.log('Gagal terbit Utas #' + seq + ' (' + rowPId + '): ' + errMsg);
+
+          // Chain Abort: gagalkan seluruh utas anak berikutnya dalam grup yang sama
+          var childAbortMsg = 'Dibatalkan otomatis: Utas #' + seq + ' gagal terbit (' + errMsg + ')';
+          abortedGroupIds[rowGId] = childAbortMsg;
+          abortSubsequentChainsInQueue(qSheet, qData, rowGId, seq, childAbortMsg, stCol, errCol, gIdCol, seqCol);
         }
-      }
-
-      if (shouldPublish) {
-        var res = publishChainGroupNow(rowPId, true);
-        processedCount++;
-        Logger.log('Worker publish thread ' + rowPId + ': ' + (res.ok ? 'Sukses' : res.message));
       }
     }
 
+    // 4. Penghapusan Aman dari Arah Bawah ke Atas (Reverse Loop)
+    if (rowsToDelete.length > 0) {
+      rowsToDelete.sort(function(a, b) { return b - a; });
+      for (var d = 0; d < rowsToDelete.length; d++) {
+        qSheet.deleteRow(rowsToDelete[d]);
+      }
+    }
+
+    SpreadsheetApp.flush();
+
+  } catch (outerErr) {
+    Logger.log('Exception in processPublishingQueue: ' + outerErr.message);
   } finally {
     try {
       lock.releaseLock();
@@ -3089,153 +3293,29 @@ function processPublishingQueue() {
 }
 
 /**
- * CRITICAL WORKER 1: Queue Publisher Engine (Atomic Locks & Rate Limiting)
+ * Helper: Menggagalkan seluruh utas lanjutan di Queue_Posts jika utas induk gagal (Chain Abort Protocol)
  */
-function processPublishingQueue() {
-  var lock = LockService.getScriptLock();
-  var acquired = false;
-  try {
-    acquired = lock.tryLock(30000);
-  } catch (e) {
-    acquired = false;
-  }
-  if (!acquired) {
-    Logger.log('processPublishingQueue dilewati: lock tidak tersedia setelah menunggu 30 detik.');
-    return;
-  }
-
-  try {
-    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    resetStalledProcessingPosts(ss);
-    var now = new Date();
-    var processedCount = 0;
-    var chains = readSheetAsJson('Post_Chains');
-    var analytics = readSheetAsJson('Post_Analytics');
-    var sRows = readSheetAsJson('Settings');
-    var fallbackHours = 24;
-    var timeoutAction = 'auto_release';
-    for (var si = 0; si < sRows.length; si++) {
-      if (sRows[si].setting_key === 'default_fallback_views_hours') {
-        fallbackHours = Number(sRows[si].setting_value) || 24;
-      }
-      if (sRows[si].setting_key === 'target_views_timeout_action') {
-        timeoutAction = sRows[si].setting_value || 'auto_release';
+function abortSubsequentChainsInQueue(sheet, data, groupId, failedSeq, errorMsg, stCol, errCol, gIdCol, seqCol) {
+  for (var i = 1; i < data.length; i++) {
+    var rowGId = String(data[i][gIdCol] || data[i][0]);
+    var curSeq = Number(data[i][seqCol] || 1);
+    if (rowGId === groupId && curSeq > failedSeq) {
+      var currentStatus = String(data[i][stCol] || '');
+      if (currentStatus === 'Scheduled' || currentStatus === 'Waiting Views' || currentStatus === 'Processing') {
+        sheet.getRange(i + 1, stCol + 1).setValue('Failed - Parent Error');
+        sheet.getRange(i + 1, errCol + 1).setValue(errorMsg);
+        data[i][stCol] = 'Failed - Parent Error';
+        data[i][errCol] = errorMsg;
       }
     }
-
-    var targetSheets = ['Queue_Posts', 'Published_Posts', 'Posts'];
-    for (var s = 0; s < targetSheets.length; s++) {
-      var sheet = ss.getSheetByName(targetSheets[s]);
-      if (!sheet) continue;
-      var postRows = sheet.getDataRange().getValues();
-      if (postRows.length <= 1) continue;
-
-      for (var pIdx = 1; pIdx < postRows.length; pIdx++) {
-        // Batch Chunking: batasi maksimal 2 pos per eksekusi cron agar terhindar dari timeout GAS
-        if (processedCount >= 2) break;
-
-        var pId = String(postRows[pIdx][0] || '').trim();
-        var status = String(postRows[pIdx][6] || '');
-        var schedAtStr = postRows[pIdx][7];
-        var checkUntilStr = postRows[pIdx][8];
-        var pubMode = String(postRows[pIdx][3] || '');
-
-        var schedDate = schedAtStr ? new Date(schedAtStr) : null;
-        var checkUntilDate = checkUntilStr ? new Date(checkUntilStr) : null;
-
-        var shouldPublish = false;
-        var isWaitingViewsCheck = false;
-
-        if (status === 'Scheduled' && schedDate) {
-          var overdueMs = now.getTime() - schedDate.getTime();
-          // Toleransi jadwal terlewat > 3 jam otomatis dijadikan Failed agar antrean lancar
-          if (overdueMs > 3 * 60 * 60 * 1000) {
-            sheet.getRange(pIdx + 1, 7).setValue('Failed');
-            sheet.getRange(pIdx + 1, 11).setValue('Auto-fail: Jadwal terlewat lebih dari 3 jam.');
-            if (sheet.getName() === 'Queue_Posts') {
-              var overdueRow = sheet.getRange(pIdx + 1, 1, 1, sheet.getLastColumn()).getValues()[0];
-              overdueRow[6] = 'Failed';
-              overdueRow[10] = 'Auto-fail: Jadwal terlewat lebih dari 3 jam.';
-              var pubSheetOverdue = ss.getSheetByName('Published_Posts');
-              if (!pubSheetOverdue) pubSheetOverdue = ss.insertSheet('Published_Posts');
-              pubSheetOverdue.appendRow(overdueRow);
-              sheet.deleteRow(pIdx + 1);
-              pIdx--;
-              postRows = sheet.getDataRange().getValues();
-            }
-            continue;
-          } else if (schedDate.getTime() <= now.getTime()) {
-            shouldPublish = true;
-          }
-        } else if (pubMode === 'target_views' || status === 'Waiting Views' || status === 'Published') {
-          // Cari rantai utas postingan ini
-          var postChains = [];
-          for (var c = 0; c < chains.length; c++) {
-            if (String(chains[c].post_id) === pId) {
-              postChains.push(chains[c]);
-            }
-          }
-          postChains.sort(function(a, b) { return Number(a.sequence_order) - Number(b.sequence_order); });
-
-          var hasRootPublished = postChains.length > 0 && !!postChains[0].threads_post_id;
-          var hasPendingChains = postChains.some(function(chn) { return !chn.threads_post_id; });
-
-          // Hanya diproses jika Utas #1 sudah live dan masih ada sisa rantai utas yang belum rilis
-          if (hasRootPublished && hasPendingChains) {
-            var targetViews = Number(postRows[pIdx][5] || 0);
-            var rootChain = postChains[0];
-            var curViews = 0;
-            for (var a = 0; a < analytics.length; a++) {
-              if (String(analytics[a].chain_id) === String(rootChain.chain_id)) {
-                curViews = Number(analytics[a].views_count || 0);
-                break;
-              }
-            }
-
-            if (!checkUntilDate) {
-              checkUntilDate = new Date(now.getTime() + fallbackHours * 60 * 60 * 1000);
-              checkUntilStr = checkUntilDate.toISOString();
-              sheet.getRange(pIdx + 1, 9).setValue(checkUntilStr);
-            }
-
-            var isTimeout = checkUntilDate && now.getTime() >= checkUntilDate.getTime();
-            if (curViews >= targetViews || (isTimeout && timeoutAction === 'auto_release')) {
-              shouldPublish = true;
-              isWaitingViewsCheck = true;
-            } else if (isTimeout && timeoutAction !== 'auto_release') {
-              sheet.getRange(pIdx + 1, 7).setValue('Closed');
-              sheet.getRange(pIdx + 1, 11).setValue('Closed: Batas waktu target views berakhir, Utas #2 batal rilis.');
-              if (sheet.getName() === 'Queue_Posts') {
-                var rowData = sheet.getRange(pIdx + 1, 1, 1, sheet.getLastColumn()).getValues()[0];
-                rowData[6] = 'Closed';
-                rowData[10] = 'Closed: Batas waktu target views berakhir, Utas #2 batal rilis.';
-                var pubSheet = ss.getSheetByName('Published_Posts');
-                if (!pubSheet) pubSheet = ss.insertSheet('Published_Posts');
-                pubSheet.appendRow(rowData);
-                sheet.deleteRow(pIdx + 1);
-                pIdx--;
-              }
-              continue;
-            }
-          }
-        }
-
-        if (shouldPublish) {
-          var execRes = executeSinglePostPublish(pId, isWaitingViewsCheck, isWaitingViewsCheck);
-          processedCount++;
-          if (!execRes.ok) {
-            Logger.log('Auto-fail cepat untuk pos ' + pId + ': ' + execRes.message);
-          }
-        }
-      }
-    }
-  } finally {
-    try {
-      lock.releaseLock();
-    } catch (e) {
-      Logger.log('Lock release warning (processPublishingQueue): ' + e.message);
-    }
   }
+}
+
+/**
+ * Alias untuk kompatibilitas trigger penamaan lama
+ */
+function processPostQueue() {
+  return processPublishingQueue();
 }
 
 function publishContainer(metaUserId, creationId, token) {

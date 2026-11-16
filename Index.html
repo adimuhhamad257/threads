@@ -4335,6 +4335,16 @@
         <div class="p-4 sm:p-5 space-y-3.5 text-xs bg-slate-50/50" style="flex: 1 1 auto; overflow-y: auto;">
           <template x-if="postDetailModal.post">
             <div class="space-y-3">
+              <!-- Banner Catatan Error Log (Jika Pos Memiliki Error) -->
+              <template x-if="postDetailModal.post.error_log">
+                <div class="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 space-y-1">
+                  <div class="flex items-center space-x-1.5 font-bold">
+                    <i data-lucide="alert-circle" class="w-4 h-4 text-rose-600"></i>
+                    <span x-text="'Catatan Kendala: ' + postDetailModal.post.status"></span>
+                  </div>
+                  <p class="text-rose-700 pl-5 text-[11px] leading-relaxed" x-text="postDetailModal.post.error_log"></p>
+                </div>
+              </template>
               <template x-for="(chain, cIdx) in getPostChains(postDetailModal.post.post_id)" :key="'dtl-chn-'+chain.chain_id">
                 <div class="p-3.5 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-2.5 transition">
                   <!-- Header Utas -->
@@ -5616,6 +5626,7 @@
             }
             if (status === 'all') return p.status !== 'Draft';
             if (status === 'Waiting Views') return self.isWaitingViewsPost(p);
+            if (status === 'Failed') return (p.status || '').indexOf('Failed') !== -1;
             return p.status === status;
           }).length;
         },
@@ -5639,6 +5650,8 @@
               matchStatus = (p.status !== 'Draft');
             } else if (status === 'Waiting Views') {
               matchStatus = self.isWaitingViewsPost(p);
+            } else if (status === 'Failed') {
+              matchStatus = (p.status || '').indexOf('Failed') !== -1;
             } else {
               matchStatus = (p.status === status);
             }
@@ -7224,6 +7237,8 @@
         },
 
         getStatusBadgeClass: function(status) {
+          if (!status) return 'bg-slate-100 text-slate-700';
+          if (status.indexOf('Failed') !== -1) return 'bg-rose-100 text-rose-800 border border-rose-200';
           switch (status) {
             case 'Scheduled': return 'bg-sky-100 text-sky-800';
             case 'Draft / Review': return 'bg-amber-100 text-amber-800';
@@ -7233,7 +7248,6 @@
             case 'Closed': return 'bg-slate-100 text-slate-700 border border-slate-300';
             case 'Target Not Reached': return 'bg-slate-200 text-slate-800';
             case 'Processing': return 'bg-purple-100 text-purple-800';
-            case 'Failed': return 'bg-red-100 text-red-800';
             default: return 'bg-slate-100 text-slate-700';
           }
         },
