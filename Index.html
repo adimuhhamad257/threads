@@ -6499,6 +6499,8 @@
         loadDraftAccIntoComposer: function(draft) {
           this.resetComposer();
           var chains = this.parseDraftChains(draft.chains_json);
+          this.composer.draft_id = draft.draft_id || '';
+          this.composer.chain_group_id = draft.draft_id || '';
           this.composer.product_id = draft.product_id || '';
           if (draft.account_id) {
             this.composer.account_id = draft.account_id;
@@ -6532,8 +6534,14 @@
         },
 
         getCommentContext: function(comment) {
-          var chain = this.postChains.find(function(c) { return c.chain_id === comment.chain_id; }) || {};
-          var post = this.posts.find(function(p) { return p.post_id === chain.post_id; }) || {};
+          var commThId = String(comment.threads_post_id || '').trim();
+          var commChainId = String(comment.chain_id || '').trim();
+          var chain = this.postChains.find(function(c) {
+            return (commThId && String(c.threads_post_id) === commThId) || String(c.chain_id) === commChainId;
+          }) || {};
+          var post = this.posts.find(function(p) {
+            return p.post_id === chain.post_id || p.post_id === chain.chain_group_id;
+          }) || {};
           var account = this.accounts.find(function(a) { return a.account_id === post.account_id; }) || {};
           var product = this.products.find(function(pr) { return pr.product_id === post.product_id; }) || {};
           return { chain: chain, post: post, account: account, product: product };
@@ -6827,16 +6835,24 @@
         getPostMetric: function(postId, metricKey) {
           var chains = this.getPostChains(postId);
           if (chains.length === 0) return 0;
-          var rootChainId = chains[0].chain_id;
-          var ana = this.postAnalytics.find(function(a) { return a.chain_id === rootChainId; });
+          var rootChain = chains[0];
+          var rootThId = String(rootChain.threads_post_id || '').trim();
+          var rootChainId = String(rootChain.chain_id || '').trim();
+          var ana = this.postAnalytics.find(function(a) {
+            return (rootThId && String(a.threads_post_id) === rootThId) || String(a.chain_id) === rootChainId || String(a.threads_post_id) === rootChainId;
+          });
           return ana ? (ana[metricKey + '_count'] || 0) : 0;
         },
 
         getPostLastSynced: function(postId) {
           var chains = this.getPostChains(postId);
           if (chains.length === 0) return '';
-          var rootChainId = chains[0].chain_id;
-          var ana = this.postAnalytics.find(function(a) { return a.chain_id === rootChainId; });
+          var rootChain = chains[0];
+          var rootThId = String(rootChain.threads_post_id || '').trim();
+          var rootChainId = String(rootChain.chain_id || '').trim();
+          var ana = this.postAnalytics.find(function(a) {
+            return (rootThId && String(a.threads_post_id) === rootThId) || String(a.chain_id) === rootChainId || String(a.threads_post_id) === rootChainId;
+          });
           if (!ana || !ana.last_synced_at) return '';
           return this.formatTimeAgo(ana.last_synced_at);
         },
@@ -6922,8 +6938,10 @@
 
         getCommentsForChain: function(chainId) {
           if (!chainId) return [];
+          var chain = this.postChains.find(function(c) { return c.chain_id === chainId; });
+          var thId = chain ? String(chain.threads_post_id || '').trim() : '';
           return this.postComments.filter(function(cm) {
-            return cm.chain_id === chainId;
+            return (thId && String(cm.threads_post_id) === thId) || String(cm.chain_id) === String(chainId);
           });
         },
 
@@ -8159,6 +8177,8 @@
           var self = this;
           var postPayload = {
             post_id: this.composer.post_id || '',
+            chain_group_id: this.composer.chain_group_id || this.composer.draft_id || '',
+            draft_id: this.composer.draft_id || '',
             account_id: targetAccs[0],
             account_ids: targetAccs,
             product_id: primaryProduct,
@@ -8212,6 +8232,8 @@
           var self = this;
           var postPayload = {
             post_id: this.composer.post_id || '',
+            chain_group_id: this.composer.chain_group_id || this.composer.draft_id || '',
+            draft_id: this.composer.draft_id || '',
             account_id: targetAccs[0],
             account_ids: targetAccs,
             product_id: primaryProduct,
@@ -8327,6 +8349,8 @@
         resetComposer: function() {
           this.clearComposerDraft();
           this.composer.post_id = '';
+          this.composer.chain_group_id = '';
+          this.composer.draft_id = '';
           this.composer.account_id = '';
           this.composer.account_ids = [];
           this.composer.product_id = '';
