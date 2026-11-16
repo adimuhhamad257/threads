@@ -842,16 +842,16 @@
 
                           <div class="flex items-center space-x-1.5">
                             <template x-if="!isRootChainPublished(post)">
-                              <button @click="publishPostDirectly(post.post_id)" class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-xl flex items-center space-x-1 transition" title="Terbitkan Sekarang">
-                                <i data-lucide="send" class="w-3.5 h-3.5"></i>
-                                <span>Rilis</span>
+                              <button @click="publishPostDirectly(post.post_id)" class="px-3 py-2 text-xs font-bold rounded-xl flex items-center space-x-1 transition" :class="post.status && post.status.indexOf('Failed') !== -1 ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'" :title="post.status && post.status.indexOf('Failed') !== -1 ? 'Coba Terbitkan Ulang' : 'Terbitkan Sekarang'">
+                                <i :data-lucide="post.status && post.status.indexOf('Failed') !== -1 ? 'rotate-ccw' : 'send'" class="w-3.5 h-3.5"></i>
+                                <span x-text="post.status && post.status.indexOf('Failed') !== -1 ? 'Coba Lagi' : 'Rilis'"></span>
                               </button>
                             </template>
 
                             <template x-if="!isPostLocked(post)">
-                              <button @click="editPost(post)" class="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-brand-700 border border-brand-200 text-xs font-bold rounded-xl flex items-center space-x-1 transition" title="Edit Jadwal">
+                              <button @click="editPost(post)" class="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-brand-700 border border-brand-200 text-xs font-bold rounded-xl flex items-center space-x-1 transition" :title="post.status && post.status.indexOf('Failed') !== -1 ? 'Jadwalkan Ulang' : 'Edit Jadwal'">
                                 <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
-                                <span>Edit</span>
+                                <span x-text="post.status && post.status.indexOf('Failed') !== -1 ? 'Jadwal Ulang' : 'Edit'"></span>
                               </button>
                             </template>
                           </div>
@@ -4475,7 +4475,7 @@
             <template x-if="postDetailModal.post && !isPostLocked(postDetailModal.post)">
               <button @click="editPost(postDetailModal.post); postDetailModal.show = false;" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm">
                 <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
-                <span x-text="postDetailModal.post.status === 'Draft' ? 'Lanjut Edit Draf' : 'Edit Jadwal'"></span>
+                <span x-text="postDetailModal.post.status === 'Draft' ? 'Lanjut Edit Draf' : ((postDetailModal.post.status && postDetailModal.post.status.indexOf('Failed') !== -1) ? 'Jadwalkan Ulang' : 'Edit Jadwal')"></span>
               </button>
             </template>
           </div>
@@ -8285,7 +8285,9 @@
 
         publishPostDirectly: function(postId) {
           var self = this;
-          this.showToast('Memproses penerbitan instan ke Meta Threads...');
+          var targetPost = this.posts.find(function(p) { return String(p.post_id) === String(postId); });
+          var isFailed = targetPost && String(targetPost.status || '').indexOf('Failed') !== -1;
+          this.showToast(isFailed ? 'Mencoba menerbitkan ulang postingan ke Threads...' : 'Memproses penerbitan instan ke Meta Threads...');
           google.script.run
             .withSuccessHandler(function(res) {
               if (res.ok) {
@@ -8293,10 +8295,12 @@
                 self.refreshAllData();
               } else {
                 self.showToast(res.message, 'error');
+                self.refreshAllData();
               }
             })
             .withFailureHandler(function(err) {
               self.showToast(err.message, 'error');
+              self.refreshAllData();
             })
             .publishPostNow(postId);
         },
