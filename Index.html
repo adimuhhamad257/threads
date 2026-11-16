@@ -1923,17 +1923,14 @@
             <div class="bg-surface p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
               <!-- Filter Status Chips -->
               <div class="flex flex-wrap items-center gap-1.5">
-                <button @click="draftAccStatusFilter = 'all'" :class="draftAccStatusFilter === 'all' ? 'bg-brand-600 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
-                  <span>Semua Draf</span> (<span x-text="draftAcc.length"></span>)
-                </button>
                 <button @click="draftAccStatusFilter = 'Pending'" :class="draftAccStatusFilter === 'Pending' ? 'bg-amber-500 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
                   <span>Pending ACC</span> (<span x-text="getDraftAccStatusCount('Pending')"></span>)
                 </button>
+                <button @click="draftAccStatusFilter = 'Revision'" :class="draftAccStatusFilter === 'Revision' ? 'bg-amber-600 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
+                  <span>Revisi</span> (<span x-text="getDraftAccStatusCount('Revision')"></span>)
+                </button>
                 <button @click="draftAccStatusFilter = 'Approved'" :class="draftAccStatusFilter === 'Approved' ? 'bg-emerald-600 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
                   <span>Approved</span> (<span x-text="getDraftAccStatusCount('Approved')"></span>)
-                </button>
-                <button @click="draftAccStatusFilter = 'Revision'" :class="draftAccStatusFilter === 'Revision' ? 'bg-amber-600 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
-                  <span>Perlu Revisi</span> (<span x-text="getDraftAccStatusCount('Revision')"></span>)
                 </button>
                 <button @click="draftAccStatusFilter = 'Rejected'" :class="draftAccStatusFilter === 'Rejected' ? 'bg-rose-600 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
                   <span>Rejected</span> (<span x-text="getDraftAccStatusCount('Rejected')"></span>)
@@ -1958,10 +1955,19 @@
             <div class="space-y-4">
               <template x-for="draft in filteredDraftAccList" :key="draft.draft_id">
                 <div class="bg-surface rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm hover:border-slate-300 transition space-y-4">
-                  <!-- Header Draf: Status, Judul & Info Terkait -->
+                  <!-- Header Draf: Status, Judul, Akun Target & Info Terkait -->
                   <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-3 border-b border-slate-100">
                     <div class="space-y-1.5 min-w-0">
                       <div class="flex flex-wrap items-center gap-2">
+                        <template x-if="draft.account_id && getAccount(draft.account_id).account_id">
+                          <div class="inline-flex items-center space-x-1.5 px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-full">
+                            <img :src="getAccount(draft.account_id).profile_picture_url || 'https://via.placeholder.com/24'" class="w-4 h-4 rounded-full border border-slate-200 object-cover shrink-0">
+                            <span class="text-xs font-bold text-slate-800" x-text="'@' + getAccount(draft.account_id).username"></span>
+                          </div>
+                        </template>
+                        <template x-if="!draft.account_id || !getAccount(draft.account_id).account_id">
+                          <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-400 border border-slate-200 italic">Belum ada akun</span>
+                        </template>
                         <span :class="getDraftAccStatusBadgeClass(draft.approval_status)" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold border inline-flex items-center space-x-1" x-text="draft.approval_status"></span>
                         <h3 class="text-sm sm:text-base font-bold text-slate-900 truncate" x-text="draft.title || 'Draf Konten Tanpa Judul'"></h3>
                       </div>
@@ -2117,10 +2123,21 @@
 
               <!-- Body Modal (Scrollable) -->
               <div class="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs flex-1 bg-slate-50/50">
-                <!-- Baris Judul Draf -->
-                <div>
-                  <label class="block font-semibold text-slate-700 mb-1">Judul / Topik Draf</label>
-                  <input type="text" x-model="draftAccModal.data.title" placeholder="Contoh: Review Stik Keju Pouch 250g - Hook Viral" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20">
+                <!-- Pilihan Akun Target & Judul Draf -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Pilih Akun Threads Target <span class="text-rose-500 font-bold">*Wajib</span></label>
+                    <select x-model="draftAccModal.data.account_id" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none font-medium">
+                      <option value="">-- Pilih Akun Target --</option>
+                      <template x-for="acc in accounts" :key="'dm-acc-'+acc.account_id">
+                        <option :value="acc.account_id" x-text="'@' + acc.username + ' (' + (acc.category || 'General') + ')'"></option>
+                      </template>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Judul / Topik Draf <span class="text-rose-500 font-bold">*Wajib</span></label>
+                    <input type="text" x-model="draftAccModal.data.title" placeholder="Contoh: Review Stik Keju Pouch 250g - Hook Viral" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20">
+                  </div>
                 </div>
 
                 <!-- Dropdown Produk & Dropdown Acuan Bank Viral -->
@@ -4759,7 +4776,7 @@
         postComments: [],
         draftAcc: [],
         draftAccSearch: '',
-        draftAccStatusFilter: 'all',
+        draftAccStatusFilter: 'Pending',
         draftActionLoadingId: '',
         draftRevisionModal: { show: false, draftId: '', notes: '', loading: false },
         draftAccModal: {
@@ -4768,6 +4785,7 @@
           loading: false,
           data: {
             draft_id: '',
+            account_id: '',
             title: '',
             product_id: '',
             viral_id: '',
@@ -5071,6 +5089,9 @@
           this.mobileMenuOpen = false;
           if (tab === 'composer' && (!this.composer.scheduled_at || new Date(this.composer.scheduled_at).getTime() <= Date.now())) {
             this.composer.scheduled_at = this.getFutureDateTimeString(15);
+          }
+          if (tab === 'draft_acc') {
+            this.draftAccStatusFilter = 'Pending';
           }
           this.$nextTick(function() { lucide.createIcons(); });
         },
@@ -6167,28 +6188,35 @@
         // --- DRAFT MODE ACC METHODS ---
         get pendingDraftAccCount() {
           return this.draftAcc.filter(function(d) {
-            return (d.approval_status || 'Pending') === 'Pending';
+            var st = String(d.approval_status || 'Pending').trim().toLowerCase();
+            return st === 'pending' || st === 'revision';
           }).length;
         },
 
         getDraftAccStatusCount: function(status) {
           return this.draftAcc.filter(function(d) {
-            return d.approval_status === status;
+            var st = String(d.approval_status || 'Pending').trim().toLowerCase();
+            return st === String(status).trim().toLowerCase();
           }).length;
         },
 
         get filteredDraftAccList() {
-          var status = this.draftAccStatusFilter;
+          var status = this.draftAccStatusFilter || 'Pending';
           var q = (this.draftAccSearch || '').toLowerCase().trim();
           var self = this;
-          return this.draftAcc.filter(function(d) {
-            if (status !== 'all' && d.approval_status !== status) return false;
+          var list = this.draftAcc.filter(function(d) {
+            var st = String(d.approval_status || 'Pending').trim().toLowerCase();
+            if (st !== String(status).trim().toLowerCase()) {
+              return false;
+            }
             if (q) {
+              var acc = self.getAccount(d.account_id);
               var prod = self.getProduct(d.product_id);
               var chains = self.parseDraftChains(d.chains_json);
               var c1 = chains[0] ? (chains[0].text_content || '') : '';
               var c2 = chains[1] ? (chains[1].text_content || '') : '';
               var matchQ = (d.title && d.title.toLowerCase().indexOf(q) !== -1) ||
+                           (acc.username && acc.username.toLowerCase().indexOf(q) !== -1) ||
                            (prod.title && prod.title.toLowerCase().indexOf(q) !== -1) ||
                            c1.toLowerCase().indexOf(q) !== -1 ||
                            c2.toLowerCase().indexOf(q) !== -1;
@@ -6196,6 +6224,12 @@
             }
             return true;
           });
+
+          list.sort(function(a, b) {
+            return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+          });
+
+          return list;
         },
 
         parseDraftChains: function(chainsJson) {
@@ -6290,6 +6324,7 @@
           this.draftAccModal.loading = false;
           this.draftAccModal.data = {
             draft_id: '',
+            account_id: this.accounts.length > 0 ? this.accounts[0].account_id : '',
             title: '',
             product_id: '',
             viral_id: '',
@@ -6309,6 +6344,7 @@
           this.draftAccModal.loading = false;
           this.draftAccModal.data = {
             draft_id: draft.draft_id,
+            account_id: draft.account_id || '',
             title: draft.title || '',
             product_id: draft.product_id || '',
             viral_id: draft.viral_id || '',
@@ -6331,6 +6367,10 @@
         },
 
         submitSaveDraftAcc: function() {
+          if (!this.draftAccModal.data.account_id) {
+            this.showToast('Pilih akun Threads target terlebih dahulu', 'error');
+            return;
+          }
           if (!this.draftAccModal.data.title.trim()) {
             this.showToast('Judul draf wajib diisi', 'error');
             return;
@@ -6352,6 +6392,7 @@
 
           var payload = {
             draft_id: this.draftAccModal.data.draft_id,
+            account_id: this.draftAccModal.data.account_id,
             title: this.draftAccModal.data.title,
             product_id: this.draftAccModal.data.product_id,
             viral_id: this.draftAccModal.data.viral_id,
@@ -6459,6 +6500,10 @@
           this.resetComposer();
           var chains = this.parseDraftChains(draft.chains_json);
           this.composer.product_id = draft.product_id || '';
+          if (draft.account_id) {
+            this.composer.account_id = draft.account_id;
+            this.composer.account_ids = [draft.account_id];
+          }
 
           if (chains.length > 0) {
             this.composer.chains = chains.map(function(c) {
@@ -6647,9 +6692,13 @@
         },
 
         get pipelinePostsCount() {
+          var seen = {};
           return this.posts.filter(function(p) {
-            var st = p.status || '';
-            return st !== 'Draft' && st.indexOf('Draft') === -1;
+            if (!p || !p.post_id) return false;
+            if (seen[p.post_id]) return false;
+            seen[p.post_id] = true;
+            var st = String(p.status || '').trim().toLowerCase();
+            return st && st !== 'draft' && st.indexOf('draft') === -1;
           }).length;
         },
 

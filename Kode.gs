@@ -200,7 +200,7 @@ function setupDatabase() {
     },
     {
       name: 'Draft_Acc',
-      headers: ['draft_id', 'title', 'product_id', 'viral_id', 'chains_json', 'approval_status', 'revision_notes', 'created_at', 'updated_at']
+      headers: ['draft_id', 'account_id', 'title', 'product_id', 'viral_id', 'chains_json', 'approval_status', 'revision_notes', 'created_at', 'updated_at']
     }
   ];
 
@@ -1750,6 +1750,7 @@ function saveDraftAcc(draftData) {
 
     var nowIso = new Date().toISOString();
     var draftId = draftData.draft_id ? String(draftData.draft_id).trim() : '';
+    var accountId = draftData.account_id ? String(draftData.account_id).trim() : '';
     var title = draftData.title ? String(draftData.title).trim() : 'Draf Konten Baru';
     var productId = draftData.product_id ? String(draftData.product_id).trim() : '';
     var viralId = draftData.viral_id ? String(draftData.viral_id).trim() : '';
@@ -1759,6 +1760,11 @@ function saveDraftAcc(draftData) {
 
     var values = sheet.getDataRange().getValues();
     var headers = values[0];
+    if (headers.indexOf('account_id') === -1) {
+      sheet.getRange(1, sheet.getLastColumn() + 1).setValue('account_id');
+      values = sheet.getDataRange().getValues();
+      headers = values[0];
+    }
     var idCol = headers.indexOf('draft_id');
     if (idCol === -1) idCol = 0;
 
@@ -1766,6 +1772,7 @@ function saveDraftAcc(draftData) {
       for (var i = 1; i < values.length; i++) {
         if (String(values[i][idCol]) === draftId) {
           var rowIdx = i + 1;
+          var aCol = headers.indexOf('account_id') + 1;
           var tCol = headers.indexOf('title') + 1;
           var pCol = headers.indexOf('product_id') + 1;
           var vCol = headers.indexOf('viral_id') + 1;
@@ -1774,6 +1781,7 @@ function saveDraftAcc(draftData) {
           var rCol = headers.indexOf('revision_notes') + 1;
           var uCol = headers.indexOf('updated_at') + 1;
 
+          if (aCol > 0) sheet.getRange(rowIdx, aCol).setValue(accountId);
           if (tCol > 0) sheet.getRange(rowIdx, tCol).setValue(title);
           if (pCol > 0) sheet.getRange(rowIdx, pCol).setValue(productId);
           if (vCol > 0) sheet.getRange(rowIdx, vCol).setValue(viralId);
@@ -1790,6 +1798,7 @@ function saveDraftAcc(draftData) {
     var newDraftId = 'dacc_' + Utilities.getUuid().slice(0, 8);
     var newRowObj = {
       draft_id: newDraftId,
+      account_id: accountId,
       title: title,
       product_id: productId,
       viral_id: viralId,
