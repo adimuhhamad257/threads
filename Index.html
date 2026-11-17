@@ -551,7 +551,7 @@
                       <div class="min-w-0">
                         <div class="flex items-center space-x-2">
                           <span class="text-xs font-bold text-slate-900" x-text="'@' + getAccount(p.account_id).username"></span>
-                          <span :class="getStatusBadgeClass(p.status)" class="px-2 py-0.5 rounded-full text-[10px] font-bold" x-text="p.status"></span>
+                          <span :class="getStatusBadgeClass(getRootStatus(p))" class="px-2 py-0.5 rounded-full text-[10px] font-bold" x-text="getRootStatus(p)"></span>
                           <span class="text-[10px] text-slate-400 font-medium hidden sm:inline" x-text="p.publishing_mode === 'target_views' ? 'Mode: Target Views (' + (p.target_views || 0) + ')' : 'Mode: Interval (' + (p.interval_minutes || 3) + 'm)'"></span>
                         </div>
                         <p class="text-xs text-slate-600 truncate max-w-lg mt-0.5 group-hover:text-brand-600 transition" x-text="getFirstChainHook(p.post_id)"></p>
@@ -698,8 +698,8 @@
                         </div>
                       </div>
                       <div class="flex flex-col items-end gap-1">
-                        <span :class="getStatusBadgeClass(post.status)" class="px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 flex items-center space-x-1">
-                          <span x-text="post.status"></span>
+                        <span :class="getStatusBadgeClass(getRootStatus(post))" class="px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 flex items-center space-x-1">
+                          <span x-text="getRootStatus(post)"></span>
                         </span>
                         <template x-if="isWaitingViewsPost(post)">
                           <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center space-x-1">
@@ -707,7 +707,7 @@
                             <span>Menunggu Target</span>
                           </span>
                         </template>
-                        <template x-if="post.status === 'Published' && !hasUnreleasedChains(post.post_id) && getPostChains(post.post_id).length > 1">
+                        <template x-if="isRootChainPublished(post) && !hasUnreleasedChains(post.post_id) && getPublishedChainsCount(post.post_id) === getPostChains(post.post_id).length && getPostChains(post.post_id).length > 1">
                           <span class="text-[9px] text-emerald-600 font-semibold flex items-center space-x-0.5">
                             <i data-lucide="check-check" class="w-3 h-3"></i>
                             <span>Semua Utas Terbit</span>
@@ -784,7 +784,7 @@
                     </template>
 
                     <!-- Live Metrics Strip (Hanya untuk pos Live/Published) -->
-                    <template x-if="post.status === 'Published' || post.status === 'Waiting Views'">
+                    <template x-if="isRootChainPublished(post)">
                       <div class="flex items-center justify-between text-slate-600 text-xs px-1">
                         <div>
                           <div class="flex items-center space-x-3">
@@ -942,8 +942,8 @@
                         <td class="py-3.5 px-4 whitespace-nowrap">
                           <div class="space-y-1.5 min-w-[140px]">
                             <div class="flex items-center gap-1.5">
-                              <span :class="getStatusBadgeClass(post.status)" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center space-x-1">
-                                <span x-text="post.status"></span>
+                              <span :class="getStatusBadgeClass(getRootStatus(post))" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center space-x-1">
+                                <span x-text="getRootStatus(post)"></span>
                               </span>
                               <template x-if="isWaitingViewsPost(post)">
                                 <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center space-x-1" title="Utas #1 Live di Threads, Utas #2 masih ditahan menunggu target views">
@@ -953,7 +953,7 @@
                               </template>
                             </div>
 
-                            <template x-if="post.status === 'Published' && !hasUnreleasedChains(post.post_id) && getPostChains(post.post_id).length > 1">
+                            <template x-if="isRootChainPublished(post) && !hasUnreleasedChains(post.post_id) && getPublishedChainsCount(post.post_id) === getPostChains(post.post_id).length && getPostChains(post.post_id).length > 1">
                               <div class="text-[10px] text-emerald-600 font-semibold flex items-center space-x-1">
                                 <i data-lucide="check-check" class="w-3 h-3"></i>
                                 <span>Semua Utas Terbit</span>
@@ -1433,7 +1433,7 @@
                     <tr class="bg-slate-50/75 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-semibold">
                       <th class="py-3.5 px-4">Akun Threads</th>
                       <th class="py-3.5 px-4">Kategori Niche</th>
-                      <th class="py-3.5 px-4">Jam Jendela Posting</th>
+                      <th class="py-3.5 px-4">Jendela Posting & Limit Harian</th>
                       <th class="py-3.5 px-4">Status Token</th>
                       <th class="py-3.5 px-4">Kadaluarsa Token</th>
                       <th class="py-3.5 px-4">Persona Tone AI</th>
@@ -1462,12 +1462,18 @@
                           <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100" x-text="acc.category || 'General'"></span>
                         </td>
 
-                        <!-- Jam Jendela Khusus Akun -->
+                        <!-- Multi-Jendela Posting & Limit Harian -->
                         <td class="py-3 px-4 whitespace-nowrap">
-                          <span class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                            <i data-lucide="clock" class="w-3.5 h-3.5 text-amber-600"></i>
-                            <span x-text="formatAccountWindow(acc)"></span>
-                          </span>
+                          <div class="space-y-1">
+                            <span class="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                              <i data-lucide="clock" class="w-3 h-3 text-amber-600"></i>
+                              <span x-text="formatAccountWindow(acc)"></span>
+                            </span>
+                            <div class="text-[10px] text-slate-500 font-semibold flex items-center space-x-1">
+                              <i data-lucide="shield" class="w-3 h-3 text-slate-400"></i>
+                              <span x-text="'Maks ' + (acc.daily_max_posts || 30) + ' pos/hari'"></span>
+                            </div>
+                          </div>
                         </td>
 
                         <!-- Status Token (Hijau Aktif / Merah Expired) -->
@@ -1787,11 +1793,89 @@
 
           <!-- TAB BARU: PUSTAKA KONTEN VIRAL (BANK INSPIRASI) -->
           <div x-show="currentTab === 'viral_library'" class="space-y-4">
-            <!-- Toolbar Sejajar: Pencarian di Kiri & Tombol Tambah di Kanan -->
+            <!-- Toolbar Sejajar: Pencarian di Kiri, Filter Produk & Tombol Tambah di Kanan -->
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface p-3.5 rounded-2xl border border-slate-200 shadow-xs">
-              <div class="relative flex-1 min-w-[220px]">
-                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
-                <input type="text" x-model="viralSearch" placeholder="Cari judul ide, hook, atau tautan sumber..." class="w-full text-xs pl-9 sm:pl-10 pr-3 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20">
+              <div class="flex flex-1 flex-wrap items-center gap-2.5">
+                <div class="relative flex-1 min-w-[200px]">
+                  <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                  <input type="text" x-model="viralSearch" placeholder="Cari judul ide, hook, atau tautan sumber..." class="w-full text-xs pl-9 sm:pl-10 pr-3 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20">
+                </div>
+
+                <!-- Custom Searchable Dropdown Filter Produk -->
+                <div class="relative" @click.outside="viralProductDropdownOpen = false">
+                  <button type="button" @click="viralProductDropdownOpen = !viralProductDropdownOpen" class="text-xs py-2 px-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-white flex items-center justify-between space-x-2 transition min-w-[170px] max-w-[240px]">
+                    <div class="flex items-center space-x-2 min-w-0 flex-1">
+                      <template x-if="!viralProductFilter">
+                        <div class="flex items-center space-x-1.5 text-slate-600 truncate">
+                          <i data-lucide="tag" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+                          <span class="font-medium truncate">Semua Ide</span>
+                        </div>
+                      </template>
+                      <template x-if="viralProductFilter === '__none__'">
+                        <div class="flex items-center space-x-1.5 text-amber-800 truncate">
+                          <i data-lucide="slash" class="w-3.5 h-3.5 text-amber-600 shrink-0"></i>
+                          <span class="font-bold truncate">Tanpa Produk (Umum)</span>
+                        </div>
+                      </template>
+                      <template x-if="viralProductFilter && viralProductFilter !== '__none__' && getProduct(viralProductFilter).product_id">
+                        <div class="flex items-center space-x-1.5 min-w-0 flex-1 truncate">
+                          <img :src="getProduct(viralProductFilter).cover_url || getFirstProductMediaUrl(viralProductFilter) || 'https://via.placeholder.com/24'" class="w-4 h-4 rounded-md object-cover border border-slate-200 shrink-0">
+                          <span class="font-bold text-slate-800 truncate" x-text="getProduct(viralProductFilter).title"></span>
+                        </div>
+                      </template>
+                    </div>
+                    <div class="flex items-center space-x-1 shrink-0 ml-1">
+                      <template x-if="viralProductFilter">
+                        <span @click.stop="selectViralProductFilter('')" class="p-0.5 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer" title="Reset filter produk">
+                          <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                        </span>
+                      </template>
+                      <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400"></i>
+                    </div>
+                  </button>
+
+                  <!-- Panel Dropdown List Produk -->
+                  <div x-show="viralProductDropdownOpen" x-cloak class="absolute left-0 top-full mt-1.5 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-40 max-h-64 overflow-hidden flex flex-col space-y-1.5">
+                    <div class="relative shrink-0">
+                      <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+                      <input type="text" x-model="viralProductFilterSearch" placeholder="Cari nama atau kategori produk..." class="w-full text-xs pl-8 pr-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500">
+                    </div>
+                    <div class="overflow-y-auto space-y-1 flex-1 pr-0.5">
+                      <!-- Opsi 1: Semua Ide -->
+                      <div @click="selectViralProductFilter('')" class="p-2 rounded-xl text-xs cursor-pointer hover:bg-slate-50 flex items-center justify-between" :class="viralProductFilter === '' ? 'bg-amber-50 text-amber-900 font-bold' : 'text-slate-700'">
+                        <div class="flex items-center space-x-2">
+                          <i data-lucide="tag" class="w-3.5 h-3.5 text-slate-400"></i>
+                          <span>Semua Ide</span>
+                        </div>
+                        <span class="text-[10px] text-slate-400 font-mono" x-text="viralLibrary.length"></span>
+                      </div>
+                      <!-- Opsi 2: Tanpa Produk (Umum) -->
+                      <div @click="selectViralProductFilter('__none__')" class="p-2 rounded-xl text-xs cursor-pointer hover:bg-slate-50 flex items-center justify-between" :class="viralProductFilter === '__none__' ? 'bg-amber-50 text-amber-900 font-bold' : 'text-slate-700'">
+                        <div class="flex items-center space-x-2">
+                          <i data-lucide="slash" class="w-3.5 h-3.5 text-slate-400"></i>
+                          <span>Tanpa Produk (Umum)</span>
+                        </div>
+                        <span class="text-[10px] text-slate-400 font-mono" x-text="viralLibrary.filter(v => getViralProductIds(v).length === 0).length"></span>
+                      </div>
+                      <!-- Opsi 3: Daftar Produk -->
+                      <template x-for="p in getFilteredViralProductFilterOptions()" :key="'vpf-prod-'+p.product_id">
+                        <div @click="selectViralProductFilter(p.product_id)" class="p-2 rounded-xl text-xs cursor-pointer hover:bg-amber-50/60 border border-transparent hover:border-amber-200 flex items-center justify-between gap-2 transition" :class="viralProductFilter === p.product_id ? 'bg-amber-50 text-amber-900 border-amber-300 font-bold' : 'text-slate-800'">
+                          <div class="flex items-center space-x-2 min-w-0 flex-1">
+                            <img :src="p.cover_url || getFirstProductMediaUrl(p.product_id) || 'https://via.placeholder.com/32'" class="w-7 h-7 rounded-lg object-cover border border-slate-200 shrink-0">
+                            <div class="min-w-0 flex-1">
+                              <span class="block truncate font-bold text-slate-900" x-text="p.title"></span>
+                              <span class="block truncate text-[10px] text-slate-400" x-text="p.category || 'General'"></span>
+                            </div>
+                          </div>
+                          <span class="text-[9px] font-bold text-amber-700 bg-amber-100/70 px-1.5 py-0.5 rounded shrink-0" x-text="viralLibrary.filter(v => getViralProductIds(v).indexOf(p.product_id) !== -1).length + ' ide'"></span>
+                        </div>
+                      </template>
+                      <template x-if="getFilteredViralProductFilterOptions().length === 0">
+                        <div class="py-4 text-center text-xs text-slate-400">Produk tidak ditemukan.</div>
+                      </template>
+                    </div>
+                  </div>
+                </div>
               </div>
               <button @click="openAddViralModal()" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:opacity-95 text-white text-xs font-semibold rounded-xl flex items-center justify-center space-x-2 shadow-sm transition shrink-0">
                 <i data-lucide="plus-circle" class="w-4 h-4"></i>
@@ -2107,24 +2191,24 @@
             </div>
           </div>
 
-          <!-- MODAL: ADD / EDIT DRAFT ACC (DENGAN PEMILIHAN MEDIA PRODUK OTOMATIS) -->
+          <!-- MODAL: ADD / EDIT DRAFT ACC (DENGAN CUSTOM DROPDOWN & BATCH ACCORDION MEDIA) -->
           <div x-cloak x-show="draftAccModal.show" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-3 sm:p-4">
-            <div class="bg-surface rounded-2xl max-w-3xl w-full mx-auto shadow-2xl border border-slate-100 overflow-hidden flex flex-col" style="max-height: 90vh;">
+            <div class="bg-surface rounded-2xl max-w-3xl w-full mx-auto shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]">
               <!-- Header Modal -->
               <div class="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
                 <div>
                   <h3 class="text-base font-bold text-slate-900" x-text="draftAccModal.isEdit ? 'Edit Draf Konten ACC' : 'Ajukan Draf Konten Baru untuk ACC'"></h3>
-                  <p class="text-xs text-slate-500">Pilih produk, acuan viral, dan centang aset media langsung dari katalog</p>
+                  <p class="text-xs text-slate-500">Pilih produk, acuan viral, dan centang aset media per batch katalog</p>
                 </div>
                 <button @click="draftAccModal.show = false" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
                   <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
               </div>
 
-              <!-- Body Modal (Scrollable) -->
-              <div class="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs flex-1 bg-slate-50/50">
+              <!-- Body Modal (Scrollable & Anti Horizontal Stretched Layout) -->
+              <div class="p-4 sm:p-5 overflow-y-auto overflow-x-hidden space-y-4 text-xs flex-1 bg-slate-50/50 min-w-0 max-w-full">
                 <!-- Pilihan Akun Target & Judul Draf -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
                   <div>
                     <label class="block font-semibold text-slate-700 mb-1">Pilih Akun Threads Target <span class="text-rose-500 font-bold">*Wajib</span></label>
                     <select x-model="draftAccModal.data.account_id" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none font-medium">
@@ -2140,48 +2224,138 @@
                   </div>
                 </div>
 
-                <!-- Dropdown Produk & Dropdown Acuan Bank Viral -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <!-- Dropdown Produk -->
-                  <div>
+                <!-- Custom Searchable Dropdowns: Produk & Acuan Bank Viral -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
+                  <!-- Custom Searchable Dropdown Produk -->
+                  <div class="relative" @click.outside="draftAccModal.productDropdownOpen = false">
                     <label class="block font-semibold text-slate-700 mb-1">Pilih Produk Affiliate Terkait</label>
-                    <select x-model="draftAccModal.data.product_id" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none font-medium">
-                      <option value="">-- Pilih Produk --</option>
-                      <template x-for="p in products" :key="'dm-prod-'+p.product_id">
-                        <option :value="p.product_id" x-text="p.title + ' (' + formatRupiah(p.price) + ')'"></option>
-                      </template>
-                    </select>
+                    <button type="button" @click="draftAccModal.productDropdownOpen = !draftAccModal.productDropdownOpen; draftAccModal.viralDropdownOpen = false;" class="w-full text-left text-xs p-2.5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 flex items-center justify-between transition focus:outline-none focus:ring-2 focus:ring-brand-500/20">
+                      <div class="flex items-center space-x-2 min-w-0 flex-1">
+                        <template x-if="draftAccModal.data.product_id && getProduct(draftAccModal.data.product_id).product_id">
+                          <div class="flex items-center space-x-2 min-w-0 flex-1">
+                            <img :src="getProduct(draftAccModal.data.product_id).cover_url || getFirstProductMediaUrl(draftAccModal.data.product_id) || 'https://via.placeholder.com/32'" class="w-6 h-6 rounded-md object-cover border border-slate-200 shrink-0">
+                            <div class="min-w-0 flex-1 truncate">
+                              <span class="font-bold text-slate-900 truncate block" x-text="getProduct(draftAccModal.data.product_id).title"></span>
+                            </div>
+                            <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 shrink-0" x-text="getProduct(draftAccModal.data.product_id).commission_pct + '%'"></span>
+                          </div>
+                        </template>
+                        <template x-if="!draftAccModal.data.product_id || !getProduct(draftAccModal.data.product_id).product_id">
+                          <span class="text-slate-400 italic">-- Pilih Produk Affiliate --</span>
+                        </template>
+                      </div>
+                      <div class="flex items-center space-x-1 shrink-0 ml-2">
+                        <template x-if="draftAccModal.data.product_id">
+                          <span @click.stop="selectDraftModalProduct('')" class="p-0.5 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer" title="Lepas Produk">
+                            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                          </span>
+                        </template>
+                        <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400"></i>
+                      </div>
+                    </button>
+
+                    <!-- Dropdown Panel Produk -->
+                    <div x-show="draftAccModal.productDropdownOpen" x-cloak class="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-40 max-h-64 overflow-hidden flex flex-col space-y-1.5">
+                      <div class="relative shrink-0">
+                        <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+                        <input type="text" x-model="draftAccModal.productSearch" placeholder="Cari nama atau kategori produk..." class="w-full text-xs pl-8 pr-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500">
+                      </div>
+                      <div class="overflow-y-auto space-y-1 flex-1 pr-0.5">
+                        <div @click="selectDraftModalProduct('')" class="p-2 rounded-xl cursor-pointer hover:bg-slate-50 flex items-center justify-between text-xs" :class="!draftAccModal.data.product_id ? 'bg-brand-50 text-brand-700 font-bold' : 'text-slate-600'">
+                          <span>-- Tanpa Produk --</span>
+                        </div>
+                        <template x-for="p in getFilteredDraftModalProducts()" :key="'dmp-prod-'+p.product_id">
+                          <div @click="selectDraftModalProduct(p.product_id)" class="p-2 rounded-xl cursor-pointer hover:bg-brand-50/60 border border-transparent hover:border-brand-200 flex items-center justify-between gap-2 transition" :class="draftAccModal.data.product_id === p.product_id ? 'bg-brand-50 text-brand-900 border-brand-300 font-bold' : 'text-slate-800'">
+                            <div class="flex items-center space-x-2.5 min-w-0">
+                              <img :src="p.cover_url || getFirstProductMediaUrl(p.product_id) || 'https://via.placeholder.com/32'" class="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0">
+                              <div class="min-w-0">
+                                <span class="block truncate text-xs font-bold" x-text="p.title"></span>
+                                <span class="block truncate text-[10px] text-slate-500" x-text="formatRupiah(p.price) + ' • Komisi ' + p.commission_pct + '%'"></span>
+                              </div>
+                            </div>
+                            <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 shrink-0 font-medium" x-text="p.category || 'General'"></span>
+                          </div>
+                        </template>
+                        <template x-if="getFilteredDraftModalProducts().length === 0">
+                          <div class="py-4 text-center text-xs text-slate-400">Produk tidak ditemukan.</div>
+                        </template>
+                      </div>
+                    </div>
                   </div>
 
-                  <!-- Dropdown Acuan Bank Viral (Referensi Bacaan Saja, Bukan Auto-Fill) -->
-                  <div>
+                  <!-- Custom Searchable Dropdown Acuan Bank Viral -->
+                  <div class="relative" @click.outside="draftAccModal.viralDropdownOpen = false">
                     <label class="block font-semibold text-slate-700 mb-1">Acuan dari Bank Ide Viral (Opsional)</label>
-                    <div class="flex items-center space-x-1.5">
-                      <select x-model="draftAccModal.data.viral_id" @change="applyViralReferenceToDraftModal()" class="flex-1 text-xs p-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none font-medium">
-                        <option value="">-- Tanpa Acuan Viral (Tulis Bebas) --</option>
-                        <template x-for="v in viralLibrary" :key="'dm-vir-'+v.viral_id">
-                          <option :value="v.viral_id" x-text="v.title + (v.views_count ? ' (' + formatViewsCount(v.views_count) + ' views)' : '')"></option>
+                    <button type="button" @click="draftAccModal.viralDropdownOpen = !draftAccModal.viralDropdownOpen; draftAccModal.productDropdownOpen = false;" class="w-full text-left text-xs p-2.5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 flex items-center justify-between transition focus:outline-none focus:ring-2 focus:ring-amber-500/20">
+                      <div class="flex items-center space-x-2 min-w-0 flex-1">
+                        <template x-if="draftAccModal.data.viral_id && getViralItem(draftAccModal.data.viral_id).viral_id">
+                          <div class="flex items-center space-x-2 min-w-0 flex-1">
+                            <i data-lucide="flame" class="w-4 h-4 text-amber-500 shrink-0"></i>
+                            <div class="min-w-0 flex-1 truncate">
+                              <span class="font-bold text-slate-900 truncate block" x-text="getViralItem(draftAccModal.data.viral_id).title"></span>
+                            </div>
+                            <template x-if="Number(getViralItem(draftAccModal.data.viral_id).views_count || 0) > 0">
+                              <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 shrink-0" x-text="formatViewsCount(getViralItem(draftAccModal.data.viral_id).views_count) + ' views'"></span>
+                            </template>
+                          </div>
                         </template>
-                      </select>
-                      <template x-if="draftAccModal.data.viral_id">
-                        <button type="button" @click="openViralReferenceDetail(draftAccModal.data.viral_id)" class="px-2.5 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition flex items-center space-x-1 shrink-0" title="Buka Detail Acuan Viral">
-                          <i data-lucide="eye" class="w-3.5 h-3.5 text-amber-600"></i>
-                          <span>Lihat Acuan</span>
-                        </button>
-                      </template>
+                        <template x-if="!draftAccModal.data.viral_id || !getViralItem(draftAccModal.data.viral_id).viral_id">
+                          <span class="text-slate-400 italic">-- Tanpa Acuan Viral (Tulis Bebas) --</span>
+                        </template>
+                      </div>
+                      <div class="flex items-center space-x-1 shrink-0 ml-2">
+                        <template x-if="draftAccModal.data.viral_id">
+                          <span @click.stop="selectDraftModalViral('')" class="p-0.5 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer" title="Lepas Acuan Viral">
+                            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                          </span>
+                        </template>
+                        <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400"></i>
+                      </div>
+                    </button>
+
+                    <!-- Dropdown Panel Viral -->
+                    <div x-show="draftAccModal.viralDropdownOpen" x-cloak class="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-40 max-h-64 overflow-hidden flex flex-col space-y-1.5">
+                      <div class="relative shrink-0">
+                        <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+                        <input type="text" x-model="draftAccModal.viralSearch" placeholder="Cari judul ide atau hook..." class="w-full text-xs pl-8 pr-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500">
+                      </div>
+                      <div class="overflow-y-auto space-y-1 flex-1 pr-0.5">
+                        <div @click="selectDraftModalViral('')" class="p-2 rounded-xl cursor-pointer hover:bg-slate-50 flex items-center justify-between text-xs" :class="!draftAccModal.data.viral_id ? 'bg-amber-50 text-amber-900 font-bold' : 'text-slate-600'">
+                          <span>-- Tanpa Acuan Viral (Tulis Bebas) --</span>
+                        </div>
+                        <template x-for="v in getFilteredDraftModalViral()" :key="'dmp-vir-'+v.viral_id">
+                          <div @click="selectDraftModalViral(v.viral_id)" class="p-2 rounded-xl cursor-pointer hover:bg-amber-50/60 border border-transparent hover:border-amber-200 flex items-center justify-between gap-2 transition" :class="draftAccModal.data.viral_id === v.viral_id ? 'bg-amber-50 text-amber-900 border-amber-300 font-bold' : 'text-slate-800'">
+                            <div class="min-w-0 flex-1">
+                              <span class="block truncate text-xs font-bold" x-text="v.title"></span>
+                              <div class="flex items-center space-x-2 mt-0.5 text-[10px] text-slate-400">
+                                <span x-text="'@' + (v.extracted_username || extractUsernameFromUrl(v.source_url) || 'anonim')"></span>
+                                <template x-if="Number(v.views_count || 0) > 0">
+                                  <span>•</span>
+                                </template>
+                                <template x-if="Number(v.views_count || 0) > 0">
+                                  <span class="text-emerald-600 font-semibold" x-text="formatViewsCount(v.views_count) + ' views'"></span>
+                                </template>
+                              </div>
+                            </div>
+                          </div>
+                        </template>
+                        <template x-if="getFilteredDraftModalViral().length === 0">
+                          <div class="py-4 text-center text-xs text-slate-400">Ide viral tidak ditemukan.</div>
+                        </template>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                <!-- Panel Bacaan Acuan Bank Viral (Hanya Referensi / Bacaan, Tidak Menimpa Teks) -->
+                <!-- Panel Acuan Bank Viral -->
                 <template x-if="draftAccModal.data.viral_id && getViralItem(draftAccModal.data.viral_id).viral_id">
-                  <div class="p-3 bg-amber-50/80 rounded-2xl border border-amber-200/90 text-xs space-y-2">
+                  <div class="p-3 bg-amber-50/80 rounded-2xl border border-amber-200/90 text-xs space-y-2 min-w-0 max-w-full">
                     <div class="flex items-center justify-between">
-                      <div class="flex items-center space-x-2">
-                        <i data-lucide="flame" class="w-4 h-4 text-amber-600"></i>
-                        <span class="font-bold text-amber-900" x-text="'Acuan Referensi: ' + getViralItem(draftAccModal.data.viral_id).title"></span>
+                      <div class="flex items-center space-x-2 min-w-0">
+                        <i data-lucide="flame" class="w-4 h-4 text-amber-600 shrink-0"></i>
+                        <span class="font-bold text-amber-900 truncate" x-text="'Acuan Referensi: ' + getViralItem(draftAccModal.data.viral_id).title"></span>
                       </div>
-                      <button type="button" @click="openViralReferenceDetail(draftAccModal.data.viral_id)" class="text-[11px] font-bold text-amber-800 hover:underline flex items-center space-x-0.5">
+                      <button type="button" @click="openViralReferenceDetail(draftAccModal.data.viral_id)" class="text-[11px] font-bold text-amber-800 hover:underline flex items-center space-x-0.5 shrink-0">
                         <span>Buka Detail Lengkap</span>
                         <i data-lucide="chevron-right" class="w-3 h-3"></i>
                       </button>
@@ -2193,10 +2367,10 @@
                   </div>
                 </template>
 
-                <!-- Dynamic Multi-Utas Cards (Teks Bebas Ketik + Pilihan Media Di Dalam Box Masing-Masing) -->
-                <div class="space-y-3">
+                <!-- Dynamic Multi-Utas Cards (Teks Bebas Ketik + Pilihan Media Accordion Per Batch) -->
+                <div class="space-y-3 min-w-0 max-w-full">
                   <template x-for="(chain, cIdx) in draftAccModal.chains" :key="'dchain-'+cIdx">
-                    <div class="p-3.5 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+                    <div class="p-3.5 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-3 min-w-0 max-w-full overflow-hidden">
                       <!-- Header Box Utas -->
                       <div class="flex items-center justify-between font-bold text-slate-800">
                         <div class="flex items-center space-x-2">
@@ -2216,35 +2390,52 @@
                       <!-- Textarea Bebas Ketik -->
                       <textarea x-model="chain.text_content" rows="3" :placeholder="cIdx === 0 ? 'Tulis hook utama yang menarik perhatian audiens...' : 'Tulis ulasan lanjutan atau ajakan klik produk...'" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 leading-relaxed"></textarea>
 
-                      <!-- Slot Media Produk Di Dalam Box Utas Ini -->
-                      <div class="pt-2 border-t border-slate-100 space-y-2">
+                      <!-- Slot Media Produk (Accordions Per Batch - No Horizontal Bursting) -->
+                      <div class="pt-2 border-t border-slate-100 space-y-2 min-w-0 max-w-full">
                         <div class="flex items-center justify-between">
                           <span class="text-[10px] uppercase font-bold text-slate-500 flex items-center space-x-1">
                             <i data-lucide="images" class="w-3 h-3 text-brand-500"></i>
-                            <span>Pilih Media untuk Utas Ini:</span>
+                            <span>Pilih Media dari Batch Katalog:</span>
                           </span>
                           <span class="text-[10px] text-brand-600 font-semibold" x-text="(chain.media_urls || []).length + ' Terpilih'"></span>
                         </div>
 
-                        <!-- Jika Produk Dipilih & Punya Media -->
-                        <template x-if="draftAccModal.data.product_id && getProductMediaForDraftModal().length > 0">
-                          <div class="flex overflow-x-auto space-x-2 pb-1 pt-0.5">
-                            <template x-for="m in getProductMediaForDraftModal()" :key="'dchain-'+cIdx+'-m-'+m.media_id">
-                              <div @click="toggleDraftModalMedia(cIdx, m.cloudinary_url)" class="relative w-16 h-16 rounded-xl overflow-hidden border-2 cursor-pointer shrink-0 transition" :class="isDraftMediaSelected(cIdx, m.cloudinary_url) ? 'border-brand-600 ring-2 ring-brand-500/20' : 'border-slate-200 bg-slate-100 opacity-70 hover:opacity-100'">
-                                <img :src="m.thumbnail_url || m.cloudinary_url" class="w-full h-full object-cover">
-                                <span class="absolute top-0.5 left-0.5 bg-black/60 text-white text-[7px] px-1 rounded font-bold" x-text="m.media_type"></span>
-                                <template x-if="isDraftMediaSelected(cIdx, m.cloudinary_url)">
-                                  <div class="absolute inset-0 bg-brand-600/30 flex items-center justify-center">
-                                    <div class="w-5 h-5 rounded-full bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center shadow-xs">✓</div>
+                        <!-- Jika Produk Dipilih & Punya Batch Media -->
+                        <template x-if="draftAccModal.data.product_id && getDraftProductBatches().length > 0">
+                          <div class="space-y-2">
+                            <template x-for="batch in getDraftProductBatches()" :key="'dch-'+cIdx+'-batch-'+batch.batch_id">
+                              <div class="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+                                <div class="p-2.5 bg-white flex items-center justify-between cursor-pointer border-b border-slate-100 hover:bg-slate-50 transition" @click="toggleDraftAccBatch(batch.batch_id)">
+                                  <div class="flex items-center space-x-2 min-w-0">
+                                    <i :data-lucide="isDraftAccBatchOpen(batch.batch_id) ? 'chevron-down' : 'chevron-right'" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-50 text-brand-700 shrink-0" x-text="'Batch #' + (batch.batch_number || 1)"></span>
+                                    <span class="text-xs text-slate-600 truncate" x-text="formatDate(batch.created_at)"></span>
+                                    <span class="text-[10px] text-slate-400 shrink-0" x-text="'(' + getMediaForBatch(batch.batch_id).length + ' media)'"></span>
                                   </div>
-                                </template>
+                                  <button type="button" @click.stop="toggleSelectAllDraftBatchMedia(cIdx, batch.batch_id)" class="px-2 py-0.5 bg-brand-50 hover:bg-brand-100 text-brand-700 text-[10px] font-bold rounded-lg border border-brand-200 transition shrink-0">
+                                    <span x-text="isAllDraftBatchMediaSelected(cIdx, batch.batch_id) ? 'Batalkan Semua' : '+ Pilih Semua'"></span>
+                                  </button>
+                                </div>
+                                <div x-show="isDraftAccBatchOpen(batch.batch_id)" class="p-2.5 grid grid-cols-4 sm:grid-cols-6 gap-2 bg-slate-50 min-w-0 max-w-full">
+                                  <template x-for="m in getMediaForBatch(batch.batch_id)" :key="'dch-'+cIdx+'-m-'+m.media_id">
+                                    <div @click="toggleDraftModalMedia(cIdx, m.cloudinary_url)" class="relative w-full aspect-square rounded-xl overflow-hidden border-2 cursor-pointer transition shadow-2xs" :class="isDraftMediaSelected(cIdx, m.cloudinary_url) ? 'border-brand-600 ring-2 ring-brand-500/20' : 'border-slate-200 bg-white hover:border-slate-300'">
+                                      <img :src="m.thumbnail_url || m.cloudinary_url" class="w-full h-full object-cover">
+                                      <span class="absolute top-0.5 left-0.5 bg-black/60 text-white text-[7px] px-1 rounded font-bold" x-text="m.media_type"></span>
+                                      <template x-if="isDraftMediaSelected(cIdx, m.cloudinary_url)">
+                                        <div class="absolute inset-0 bg-brand-600/30 flex items-center justify-center">
+                                          <div class="w-5 h-5 rounded-full bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center shadow-xs">✓</div>
+                                        </div>
+                                      </template>
+                                    </div>
+                                  </template>
+                                </div>
                               </div>
                             </template>
                           </div>
                         </template>
 
                         <!-- Jika Produk Dipilih Tapi Belum Punya Media -->
-                        <template x-if="draftAccModal.data.product_id && getProductMediaForDraftModal().length === 0">
+                        <template x-if="draftAccModal.data.product_id && getDraftProductBatches().length === 0">
                           <div class="text-[11px] text-slate-400 italic py-1">Produk ini belum memiliki aset media di katalog.</div>
                         </template>
 
@@ -2252,7 +2443,7 @@
                         <template x-if="!draftAccModal.data.product_id">
                           <div class="text-[11px] text-slate-400 italic py-1 flex items-center space-x-1">
                             <i data-lucide="info" class="w-3 h-3 text-slate-400"></i>
-                            <span>Pilih produk affiliate di atas untuk memunculkan pilihan media produk ini.</span>
+                            <span>Pilih produk affiliate di atas untuk menampilkan kelompok media batch.</span>
                           </div>
                         </template>
                       </div>
@@ -3302,20 +3493,49 @@
             <input type="text" x-model="accountModal.category" placeholder="Contoh: Home & Living, Beauty, Gadget, Kuliner" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50">
           </div>
 
-          <!-- Konfigurasi Jam Jendela Operasional Khusus Akun Ini -->
-          <div class="p-3 bg-amber-50/70 rounded-xl border border-amber-200 space-y-2">
-            <span class="block text-[11px] font-bold text-amber-900 uppercase">Jam Jendela Posting Akun Ini (WIB)</span>
-            <div class="grid grid-cols-2 gap-2">
+          <!-- Konfigurasi Multi-Jendela Posting Dinamis & Batas Harian -->
+          <div class="p-3.5 bg-amber-50/70 rounded-2xl border border-amber-200 space-y-3">
+            <div class="flex items-center justify-between">
               <div>
-                <label class="block text-[10px] text-slate-600 font-semibold mb-0.5">Jam Mulai</label>
-                <input type="time" x-model="accountModal.window_start" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white font-mono">
+                <span class="block text-[11px] font-bold text-amber-900 uppercase">Jendela Waktu Posting (Multi-Window WIB)</span>
+                <span class="text-[10px] text-slate-500">Utas #1 hanya rilis di dalam rentang jam ini.</span>
               </div>
-              <div>
-                <label class="block text-[10px] text-slate-600 font-semibold mb-0.5">Jam Selesai</label>
-                <input type="time" x-model="accountModal.window_end" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white font-mono">
+              <button type="button" @click="addAccountPostingWindow()" class="px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-[10px] font-bold transition flex items-center space-x-1 shadow-2xs">
+                <i data-lucide="plus" class="w-3 h-3 text-amber-600"></i>
+                <span>+ Tambah Jendela</span>
+              </button>
+            </div>
+
+            <!-- Dynamic Window Rows -->
+            <div class="space-y-2">
+              <template x-for="(win, wIdx) in accountModal.posting_windows" :key="'acc-win-'+wIdx">
+                <div class="flex items-center space-x-2 bg-white p-2 rounded-xl border border-amber-200/80 shadow-2xs">
+                  <div class="flex-1">
+                    <label class="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Jam Mulai</label>
+                    <input type="time" x-model="win.start" class="w-full text-xs p-1.5 rounded-lg border border-slate-200 bg-slate-50 font-mono">
+                  </div>
+                  <span class="text-slate-400 font-bold pt-3">-</span>
+                  <div class="flex-1">
+                    <label class="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Jam Selesai</label>
+                    <input type="time" x-model="win.end" class="w-full text-xs p-1.5 rounded-lg border border-slate-200 bg-slate-50 font-mono">
+                  </div>
+                  <template x-if="accountModal.posting_windows.length > 1">
+                    <button type="button" @click="removeAccountPostingWindow(wIdx)" class="pt-3 p-1.5 text-slate-400 hover:text-rose-600 transition" title="Hapus Jendela Ini">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </template>
+                </div>
+              </template>
+            </div>
+
+            <!-- Batas Maksimal Postingan Harian -->
+            <div class="pt-2 border-t border-amber-200/60">
+              <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">Batas Maksimal Postingan Harian (Utas #1)</label>
+              <div class="flex items-center space-x-2">
+                <input type="number" min="1" max="200" x-model.number="accountModal.daily_max_posts" class="w-28 text-xs p-2 rounded-xl border border-slate-200 bg-white font-bold text-brand-600">
+                <span class="text-[10px] text-slate-500">pos per hari. Utas sambungan (#2+) mendapat Jalur VIP tanpa batas.</span>
               </div>
             </div>
-            <span class="text-[10px] text-slate-500 block">Jadwal algoritma jam terbaik akan diprioritaskan di dalam rentang ini.</span>
           </div>
 
           <div>
@@ -3617,32 +3837,27 @@
                   </button>
                 </div>
 
-                <!-- Grid Media di dalam Batch (Dukungan Pemutar Video Interaktif) -->
+                <!-- Grid Media di dalam Batch (Klik Thumbnail untuk Membuka Lightbox & Aksi) -->
                 <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3 mt-3">
                   <template x-for="(item, mIdx) in getMediaForBatch(batch.batch_id)" :key="'bmed-'+item.media_id">
-                    <div class="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900 aspect-square group shadow-xs">
+                    <div @click="openProductMediaLightbox(item)" class="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900 aspect-square group shadow-xs cursor-pointer hover:border-brand-400 hover:ring-2 hover:ring-brand-500/20 transition">
                       <template x-if="isVideoMedia(item.cloudinary_url) || item.media_type === 'VIDEO'">
-                        <video :src="item.cloudinary_url" controls muted playsinline class="w-full h-full object-cover"></video>
+                        <video :src="item.cloudinary_url" muted playsinline class="w-full h-full object-cover pointer-events-none"></video>
                       </template>
                       <template x-if="!isVideoMedia(item.cloudinary_url) && item.media_type !== 'VIDEO'">
                         <img :src="item.thumbnail_url || item.cloudinary_url" class="w-full h-full object-cover">
                       </template>
-                      <span class="absolute top-1 left-1 bg-black/60 text-white text-[9px] px-1 rounded font-bold" x-text="item.media_type"></span>
 
-                      <!-- Reorder Buttons (< dan >) -->
-                      <div class="absolute bottom-1 left-1 right-1 flex justify-between opacity-0 group-hover:opacity-100 transition px-1">
-                        <button @click="shiftMediaPosition(item.media_id, -1)" class="w-6 h-6 bg-slate-900/80 text-white text-xs rounded flex items-center justify-center hover:bg-slate-900" title="Geser ke Kiri">&lt;</button>
-                        <button @click="shiftMediaPosition(item.media_id, 1)" class="w-6 h-6 bg-slate-900/80 text-white text-xs rounded flex items-center justify-center hover:bg-slate-900" title="Geser ke Kanan">&gt;</button>
-                      </div>
+                      <!-- Badge Nomor Urutan & Tipe Media -->
+                      <span class="absolute top-1 left-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded font-mono font-bold" x-text="'#' + (mIdx + 1)"></span>
+                      <span class="absolute top-1 right-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded font-bold" x-text="item.media_type"></span>
 
-                      <div class="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center space-y-1 p-1">
-                        <button @click="makeProductCover(item.cloudinary_url)" class="px-2 py-0.5 bg-white text-slate-900 text-[9px] font-bold rounded shadow-sm hover:bg-slate-100">
-                          Jadikan Cover
-                        </button>
-                        <button @click="promptDeleteMedia(item.media_id)" class="text-rose-400 hover:text-rose-200 text-[10px] font-semibold flex items-center space-x-0.5">
-                          <i data-lucide="trash-2" class="w-3 h-3"></i>
-                          <span>Hapus</span>
-                        </button>
+                      <!-- Hover Indicator (Buka Pratinjau & Aksi) -->
+                      <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white">
+                        <div class="flex items-center space-x-1 text-[11px] font-bold bg-black/60 px-2 py-1 rounded-lg backdrop-blur-xs">
+                          <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i>
+                          <span>Kelola</span>
+                        </div>
                       </div>
                     </div>
                   </template>
@@ -3685,13 +3900,13 @@
 
           <!-- Daftar Batch Media Produk (Accordion Mode) -->
           <div class="max-h-[50vh] overflow-y-auto space-y-3 pr-1">
-            <template x-for="batch in activePickerBatches" :key="'pbatch-'+batch.batch_id">
+            <template x-for="(batch, batchIdx) in activePickerBatches" :key="'pbatch-'+batch.batch_id">
               <div class="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
                 <!-- Accordion Header -->
                 <div class="p-3 bg-white flex items-center justify-between cursor-pointer border-b border-slate-100" @click="togglePickerBatch(batch.batch_id)">
                   <div class="flex items-center space-x-2">
                     <i :data-lucide="isPickerBatchOpen(batch.batch_id) ? 'chevron-down' : 'chevron-right'" class="w-4 h-4 text-slate-400"></i>
-                    <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-brand-50 text-brand-700" x-text="'Batch #' + (batch.batch_number || 1)"></span>
+                    <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-brand-50 text-brand-700" x-text="'Batch #' + (batchIdx + 1)"></span>
                     <span class="text-xs font-semibold text-slate-800" x-text="getProduct(batch.product_id).title"></span>
                     <span class="text-[11px] text-slate-400" x-text="'(' + getPickerMediaForBatch(batch.batch_id).length + ' media)'"></span>
                   </div>
@@ -4295,7 +4510,7 @@
                 <div class="flex flex-wrap items-center gap-1.5">
                   <h3 class="text-xs sm:text-sm font-bold text-slate-900 truncate" x-text="'@' + getAccount(postDetailModal.post ? postDetailModal.post.account_id : '').username"></h3>
                   <i data-lucide="badge-check" class="w-3.5 h-3.5 text-brand-600 shrink-0"></i>
-                  <span :class="getStatusBadgeClass(postDetailModal.post ? postDetailModal.post.status : '')" class="px-2 py-0.5 rounded-full text-[10px] font-bold" x-text="postDetailModal.post ? postDetailModal.post.status : ''"></span>
+                  <span :class="getStatusBadgeClass(postDetailModal.post ? getRootStatus(postDetailModal.post) : '')" class="px-2 py-0.5 rounded-full text-[10px] font-bold" x-text="postDetailModal.post ? getRootStatus(postDetailModal.post) : ''"></span>
                   <template x-if="postDetailModal.post && isWaitingViewsPost(postDetailModal.post)">
                     <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center space-x-1">
                       <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
@@ -4410,17 +4625,15 @@
                   </template>
 
                   <!-- Metrik & Komentar: Khusus Utas Live / Terbit -->
-                  <template x-if="postDetailModal.post && (postDetailModal.post.status === 'Published' || postDetailModal.post.status === 'Waiting Views') && chain.threads_post_id">
+                  <template x-if="chain.threads_post_id">
                     <div class="pt-2 border-t border-slate-100 space-y-2">
                       <div class="flex flex-wrap items-center justify-between gap-2">
                         <div class="flex items-center space-x-3 text-xs font-semibold text-slate-700">
-                          <template x-if="cIdx === 0">
-                            <div class="flex items-center space-x-2.5">
-                              <span class="inline-flex items-center space-x-1" title="Views"><i data-lucide="eye" class="w-3.5 h-3.5 text-slate-400"></i><span x-text="getPostMetric(postDetailModal.post.post_id, 'views')"></span></span>
-                              <span class="inline-flex items-center space-x-1" title="Likes"><i data-lucide="heart" class="w-3.5 h-3.5 text-rose-500"></i><span x-text="getPostMetric(postDetailModal.post.post_id, 'likes')"></span></span>
-                              <span class="inline-flex items-center space-x-1" title="Reposts"><i data-lucide="repeat" class="w-3.5 h-3.5 text-emerald-500"></i><span x-text="getPostMetric(postDetailModal.post.post_id, 'reposts')"></span></span>
-                            </div>
-                          </template>
+                          <div class="flex items-center space-x-2.5">
+                            <span class="inline-flex items-center space-x-1" title="Views"><i data-lucide="eye" class="w-3.5 h-3.5 text-slate-400"></i><span x-text="getPostMetric(chain.threads_post_id || chain.chain_id, 'views')"></span></span>
+                            <span class="inline-flex items-center space-x-1" title="Likes"><i data-lucide="heart" class="w-3.5 h-3.5 text-rose-500"></i><span x-text="getPostMetric(chain.threads_post_id || chain.chain_id, 'likes')"></span></span>
+                            <span class="inline-flex items-center space-x-1" title="Reposts"><i data-lucide="repeat" class="w-3.5 h-3.5 text-emerald-500"></i><span x-text="getPostMetric(chain.threads_post_id || chain.chain_id, 'reposts')"></span></span>
+                          </div>
                           
                           <button type="button" @click="toggleChainComments(chain.chain_id)" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg border text-xs font-semibold" :class="isChainCommentsOpen(chain.chain_id) ? 'bg-brand-50 border-brand-200 text-brand-700 font-bold' : 'bg-slate-50 border-slate-200 text-slate-600'">
                             <i data-lucide="message-circle" class="w-3 h-3 text-brand-600"></i>
@@ -4429,9 +4642,7 @@
                           </button>
                         </div>
 
-                        <template x-if="cIdx === 0">
-                          <span class="text-[9px] text-slate-400" x-text="getPostLastSynced(postDetailModal.post.post_id) ? ('Sinkron ' + getPostLastSynced(postDetailModal.post.post_id)) : ''"></span>
-                        </template>
+                        <span class="text-[9px] text-slate-400" x-text="getPostLastSynced(chain.threads_post_id || chain.chain_id) ? ('Sinkron ' + getPostLastSynced(chain.threads_post_id || chain.chain_id)) : ''"></span>
                       </div>
 
                       <!-- Sub-Panel Komentar Utas -->
@@ -4484,21 +4695,50 @@
       </div>
     </div>
 
-  <!-- MODAL FULLSCREEN MEDIA PREVIEW -->
-  <div x-cloak x-show="fullscreenModal.show" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4" @click.self="fullscreenModal.show = false">
+  <!-- MODAL FULLSCREEN MEDIA PREVIEW & LIGHTBOX ACTION BAR -->
+  <div x-cloak x-show="fullscreenModal.show" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-md p-4" @click.self="fullscreenModal.show = false">
     <div class="relative max-w-4xl max-h-[90vh] flex flex-col items-center">
-      <button @click="fullscreenModal.show = false" class="absolute -top-10 right-0 text-white hover:text-slate-300 transition">
+      <button @click="fullscreenModal.show = false" class="absolute -top-10 right-0 text-white hover:text-slate-300 transition p-1 rounded-lg">
         <i data-lucide="x" class="w-7 h-7"></i>
       </button>
-      <div class="overflow-hidden rounded-2xl bg-black border border-white/10 shadow-2xl">
+      <div class="overflow-hidden rounded-2xl bg-black border border-white/10 shadow-2xl flex items-center justify-center">
         <template x-if="fullscreenModal.isVideo">
-          <video :src="fullscreenModal.url" controls autoplay class="max-h-[80vh] max-w-full"></video>
+          <video :src="fullscreenModal.url" controls autoplay class="max-h-[70vh] max-w-full"></video>
         </template>
         <template x-if="!fullscreenModal.isVideo">
-          <img :src="fullscreenModal.url" class="max-h-[80vh] max-w-full object-contain">
+          <img :src="fullscreenModal.url" class="max-h-[70vh] max-w-full object-contain">
         </template>
       </div>
-      <p class="text-xs text-white/70 mt-2 truncate max-w-md text-center" x-text="fullscreenModal.title"></p>
+      <p class="text-xs text-white/70 mt-2 truncate max-w-md text-center font-medium" x-text="fullscreenModal.title"></p>
+
+      <!-- Action Bar untuk Kelola Media Produk di dalam Lightbox -->
+      <template x-if="fullscreenModal.mediaItem">
+        <div class="mt-3 flex flex-wrap items-center justify-center gap-2 bg-slate-900/90 border border-white/10 backdrop-blur-md px-4 py-2 rounded-2xl shadow-xl">
+          <!-- Geser Kiri -->
+          <button type="button" @click="shiftLightboxMedia(-1)" :disabled="isLightboxMediaAtEdge(-1)" class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-30 disabled:cursor-not-allowed" title="Pindahkan urutan ke kiri">
+            <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            <span>Geser Kiri</span>
+          </button>
+
+          <!-- Jadikan Cover Produk -->
+          <button type="button" @click="makeProductCoverFromLightbox()" class="px-3.5 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold flex items-center space-x-1.5 shadow-sm transition">
+            <i data-lucide="image" class="w-4 h-4"></i>
+            <span>Jadikan Cover Produk</span>
+          </button>
+
+          <!-- Hapus Media Ini -->
+          <button type="button" @click="deleteMediaFromLightbox()" class="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center space-x-1.5 shadow-sm transition">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+            <span>Hapus Media Ini</span>
+          </button>
+
+          <!-- Geser Kanan -->
+          <button type="button" @click="shiftLightboxMedia(1)" :disabled="isLightboxMediaAtEdge(1)" class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-30 disabled:cursor-not-allowed" title="Pindahkan urutan ke kanan">
+            <span>Geser Kanan</span>
+            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </template>
     </div>
   </div>
 
@@ -4580,21 +4820,20 @@
 
           <!-- Scope Switcher: Produk Terkait vs Semua Inspirasi -->
           <div class="mt-3 flex flex-wrap items-center justify-between gap-2.5">
-                  <div class="flex items-center space-x-1.5 bg-slate-100 p-1 rounded-xl">
-                    <template x-if="composer.product_id">
-                      <button type="button" @click="composerIdeaBankModal.filterScope = 'product'" :class="composerIdeaBankModal.filterScope === 'product' ? 'bg-white text-slate-900 font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'" class="px-3 py-1.5 rounded-lg text-xs transition flex items-center space-x-1.5">
-                        <i data-lucide="tag" class="w-3.5 h-3.5 text-indigo-600"></i>
-                        <span>Hanya Produk Terkait</span>
-                        <span class="px-1.5 py-0.2 rounded-full text-[9px] bg-indigo-50 text-indigo-700 font-bold" x-text="viralLibrary.filter(v => getViralProductIds(v).indexOf(composer.product_id) !== -1).length"></span>
-                      </button>
-                    </template>
+            <div class="flex items-center space-x-1.5 bg-slate-100 p-1 rounded-xl">
+              <template x-if="getEffectiveComposerProductId()">
+                <button type="button" @click="composerIdeaBankModal.filterScope = 'product'" :class="composerIdeaBankModal.filterScope === 'product' ? 'bg-white text-slate-900 font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'" class="px-3 py-1.5 rounded-lg text-xs transition flex items-center space-x-1.5">
+                  <i data-lucide="tag" class="w-3.5 h-3.5 text-indigo-600"></i>
+                  <span>Hanya Produk Terkait</span>
+                  <span class="px-1.5 py-0.2 rounded-full text-[9px] bg-indigo-50 text-indigo-700 font-bold" x-text="getViralCountForComposerProduct()"></span>
+                </button>
+              </template>
               <button type="button" @click="composerIdeaBankModal.filterScope = 'all'" :class="composerIdeaBankModal.filterScope === 'all' ? 'bg-white text-slate-900 font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'" class="px-3 py-1.5 rounded-lg text-xs transition flex items-center space-x-1.5">
                 <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-500"></i>
                 <span>Semua Inspirasi Ide</span>
                 <span class="px-1.5 py-0.2 rounded-full text-[9px] bg-amber-50 text-amber-700 font-bold" x-text="viralLibrary.length"></span>
               </button>
             </div>
-
           </div>
 
           <!-- Search Input -->
@@ -4793,6 +5032,11 @@
           show: false,
           isEdit: false,
           loading: false,
+          productDropdownOpen: false,
+          viralDropdownOpen: false,
+          productSearch: '',
+          viralSearch: '',
+          openBatchIds: [],
           data: {
             draft_id: '',
             account_id: '',
@@ -4816,8 +5060,11 @@
 
         // Viral Library State
         viralSearch: '',
+        viralProductFilter: '',
+        viralProductDropdownOpen: false,
+        viralProductFilterSearch: '',
         viralDetailUpdating: false,
-        fullscreenModal: { show: false, url: '', isVideo: false, title: '' },
+        fullscreenModal: { show: false, url: '', isVideo: false, title: '', mediaItem: null, batchId: '' },
         viralModal: {
           show: false,
           isEdit: false,
@@ -4856,7 +5103,7 @@
         
         toast: { show: false, message: '', type: 'success' },
         confirmModal: { show: false, title: '', message: '', onConfirm: () => {} },
-        accountModal: { show: false, isEdit: false, accountId: '', token: '', category: 'General', account_persona: '', window_start: '08:00', window_end: '22:00', loading: false },
+        accountModal: { show: false, isEdit: false, accountId: '', token: '', category: 'General', account_persona: '', posting_windows: [{ start: '08:00', end: '22:00' }], daily_max_posts: 30, loading: false },
         productModal: { show: false, isEdit: false, data: { product_id: '', title: '', category: '', price: 0, description: '', affiliate_link: '', dashboard_url: '', commission_pct: 0, shopee_commission_pct: 0, cover_url: '', assigned_account_ids: [] }, loading: false },
         productMediaModal: { show: false, product: null, selectedFiles: [], uploading: false, uploadPercent: 0, progressText: '', showUploadForm: false },
         mediaPickerModal: { show: false, targetChainIndex: 0, selectedMediaIds: [], openBatchIds: [] },
@@ -4991,6 +5238,15 @@
             self.postsPage = 1;
             self.$nextTick(function() { lucide.createIcons(); });
           });
+          this.$watch('viralProductFilter', function() {
+            self.$nextTick(function() { lucide.createIcons(); });
+          });
+          this.$watch('viralProductDropdownOpen', function(isOpen) {
+            if (isOpen) {
+              self.viralProductFilterSearch = '';
+              self.$nextTick(function() { lucide.createIcons(); });
+            }
+          });
           this.$watch('globalSearch', function() {
             self.postsPage = 1;
             self.productsPage = 1;
@@ -5068,8 +5324,58 @@
           this.fullscreenModal.url = url;
           this.fullscreenModal.isVideo = !!isVideo;
           this.fullscreenModal.title = title || '';
+          this.fullscreenModal.mediaItem = null;
+          this.fullscreenModal.batchId = '';
           this.fullscreenModal.show = true;
           this.$nextTick(function() { lucide.createIcons(); });
+        },
+
+        openProductMediaLightbox: function(item) {
+          var isVid = this.isVideoMedia(item.cloudinary_url) || item.media_type === 'VIDEO';
+          this.fullscreenModal.url = item.cloudinary_url;
+          this.fullscreenModal.isVideo = isVid;
+          this.fullscreenModal.title = 'Media #' + (item.sequence_order || '');
+          this.fullscreenModal.mediaItem = item;
+          this.fullscreenModal.batchId = item.batch_id;
+          this.fullscreenModal.show = true;
+          this.$nextTick(function() { lucide.createIcons(); });
+        },
+
+        isLightboxMediaAtEdge: function(direction) {
+          if (!this.fullscreenModal.mediaItem) return true;
+          var batchMedia = this.getMediaForBatch(this.fullscreenModal.mediaItem.batch_id);
+          var currentId = this.fullscreenModal.mediaItem.media_id;
+          var idx = batchMedia.findIndex(function(m) { return m.media_id === currentId; });
+          if (idx === -1) return true;
+          var nextIdx = idx + direction;
+          return nextIdx < 0 || nextIdx >= batchMedia.length;
+        },
+
+        shiftLightboxMedia: function(direction) {
+          if (!this.fullscreenModal.mediaItem) return;
+          var curId = this.fullscreenModal.mediaItem.media_id;
+          this.shiftMediaPosition(curId, direction);
+          var self = this;
+          setTimeout(function() {
+            var updated = self.mediaFiles.find(function(m) { return m.media_id === curId; });
+            if (updated) {
+              self.fullscreenModal.mediaItem = updated;
+              self.fullscreenModal.title = 'Media #' + (updated.sequence_order || '');
+            }
+          }, 150);
+        },
+
+        makeProductCoverFromLightbox: function() {
+          if (!this.fullscreenModal.mediaItem) return;
+          this.makeProductCover(this.fullscreenModal.mediaItem.cloudinary_url);
+        },
+
+        deleteMediaFromLightbox: function() {
+          if (!this.fullscreenModal.mediaItem) return;
+          var mId = this.fullscreenModal.mediaItem.media_id;
+          this.fullscreenModal.show = false;
+          this.fullscreenModal.mediaItem = null;
+          this.promptDeleteMedia(mId);
         },
 
         showToast: function(msg, type) {
@@ -5516,9 +5822,22 @@
           }).length;
         },
 
+        getRootStatus: function(post) {
+          if (!post) return 'Scheduled';
+          if (post.root_status) return post.root_status;
+          var chains = this.getPostChains(post.post_id);
+          if (chains.length > 0) {
+            var root = chains[0];
+            if (root.threads_post_id) return 'Published';
+            if (root.status) return root.status;
+          }
+          if (this.isRootChainPublished(post)) return 'Published';
+          return post.status || 'Scheduled';
+        },
+
         isRootChainPublished: function(post) {
           if (!post) return false;
-          if (post.status === 'Published') return true;
+          if (post.status === 'Published' || post.root_status === 'Published') return true;
           var chains = this.getPostChains(post.post_id);
           return chains.length > 0 && !!chains[0].threads_post_id;
         },
@@ -5592,13 +5911,19 @@
         hasUnreleasedChains: function(postId) {
           var chains = this.getPostChains(postId);
           if (chains.length <= 1) return false;
-          return chains.some(function(c) { return !c.threads_post_id; });
+          // HANYA hitung anak utas (index > 0) yang aktif di antrean (tidak Closed, tidak Failed, belum terbit)
+          return chains.slice(1).some(function(c) {
+            if (c.threads_post_id) return false;
+            var st = String(c.status || '').trim();
+            if (st === 'Closed' || st.indexOf('Failed') !== -1) return false;
+            return st === 'Waiting Views' || st === 'Scheduled' || st === 'Processing' || !st;
+          });
         },
 
         isWaitingViewsPost: function(post) {
           if (!post) return false;
-          if (post.status === 'Draft' || post.status === 'Scheduled' || post.status === 'Closed') return false;
-          if (post.status === 'Waiting Views') return true;
+          if (post.status === 'Draft') return false;
+          // Harus merupakan pos target_views dengan Utas 1 sudah terbit dan memiliki rantai sambungan yang masih aktif di antrean
           return (this.isRootChainPublished(post) && post.publishing_mode === 'target_views' && this.hasUnreleasedChains(post.post_id));
         },
 
@@ -5624,10 +5949,12 @@
                            hook.indexOf(q) !== -1;
               if (!matchQ) return false;
             }
-            if (status === 'all') return p.status !== 'Draft';
+            var rootSt = self.getRootStatus(p);
+            if (status === 'all') return rootSt !== 'Draft' && p.status !== 'Draft';
             if (status === 'Waiting Views') return self.isWaitingViewsPost(p);
-            if (status === 'Failed') return (p.status || '').indexOf('Failed') !== -1;
-            return p.status === status;
+            if (status === 'Published') return rootSt === 'Published' || p.status === 'Published';
+            if (status === 'Failed') return (p.status || '').indexOf('Failed') !== -1 || (rootSt || '').indexOf('Failed') !== -1;
+            return rootSt === status || p.status === status;
           }).length;
         },
 
@@ -5646,14 +5973,17 @@
             if (self.postAccountFilter && p.account_id !== self.postAccountFilter) return false;
             if (!self.isPostInDateRange(p, dateRange)) return false;
             var matchStatus = false;
+            var rootSt = self.getRootStatus(p);
             if (status === 'all') {
-              matchStatus = (p.status !== 'Draft');
+              matchStatus = (rootSt !== 'Draft' && p.status !== 'Draft');
             } else if (status === 'Waiting Views') {
               matchStatus = self.isWaitingViewsPost(p);
+            } else if (status === 'Published') {
+              matchStatus = (rootSt === 'Published' || p.status === 'Published');
             } else if (status === 'Failed') {
-              matchStatus = (p.status || '').indexOf('Failed') !== -1;
+              matchStatus = (p.status || '').indexOf('Failed') !== -1 || (rootSt || '').indexOf('Failed') !== -1;
             } else {
-              matchStatus = (p.status === status);
+              matchStatus = (rootSt === status || p.status === status);
             }
             if (!matchStatus) return false;
             if (!q) return true;
@@ -5707,12 +6037,56 @@
           });
         },
 
+        getFilteredViralProductFilterOptions: function() {
+          var q = (this.viralProductFilterSearch || '').toLowerCase().trim();
+          if (!q) return this.products;
+          return this.products.filter(function(p) {
+            return (p.title && p.title.toLowerCase().indexOf(q) !== -1) ||
+                   (p.category && p.category.toLowerCase().indexOf(q) !== -1);
+          });
+        },
+
+        selectViralProductFilter: function(val) {
+          this.viralProductFilter = val;
+          this.viralProductDropdownOpen = false;
+          this.viralProductFilterSearch = '';
+          this.$nextTick(function() { lucide.createIcons(); });
+        },
+
+        getEffectiveComposerProductId: function() {
+          if (this.composer.product_id) return this.composer.product_id;
+          if (this.composer.chains && this.composer.chains.length > 0) {
+            for (var i = 0; i < this.composer.chains.length; i++) {
+              var pIds = this.composer.chains[i].product_ids;
+              if (Array.isArray(pIds) && pIds.length > 0 && pIds[0]) {
+                return pIds[0];
+              }
+            }
+          }
+          return '';
+        },
+
+        getViralCountForComposerProduct: function() {
+          var pId = this.getEffectiveComposerProductId();
+          if (!pId) return 0;
+          var self = this;
+          return this.viralLibrary.filter(function(v) {
+            return self.getViralProductIds(v).indexOf(pId) !== -1;
+          }).length;
+        },
+
         get filteredViralLibrary() {
           var q = this.viralSearch.toLowerCase().trim();
+          var prodFilter = this.viralProductFilter;
           var self = this;
           var list = this.viralLibrary.filter(function(v) {
-            if (!q) return true;
             var pIds = self.getViralProductIds(v);
+            if (prodFilter === '__none__') {
+              if (pIds.length > 0) return false;
+            } else if (prodFilter) {
+              if (pIds.indexOf(prodFilter) === -1) return false;
+            }
+            if (!q) return true;
             var prodTitles = pIds.map(function(id) {
               var p = self.getProduct(id);
               return p && p.title ? p.title.toLowerCase() : '';
@@ -6281,10 +6655,93 @@
           }
         },
 
-        getProductMediaForDraftModal: function() {
+        getFilteredDraftModalProducts: function() {
+          var q = (this.draftAccModal.productSearch || '').toLowerCase().trim();
+          if (!q) return this.products;
+          return this.products.filter(function(p) {
+            return (p.title && p.title.toLowerCase().indexOf(q) !== -1) ||
+                   (p.category && p.category.toLowerCase().indexOf(q) !== -1);
+          });
+        },
+
+        selectDraftModalProduct: function(productId) {
+          this.draftAccModal.data.product_id = productId;
+          this.draftAccModal.productDropdownOpen = false;
+          this.draftAccModal.productSearch = '';
+          var batches = this.getBatchesForProduct(productId);
+          this.draftAccModal.openBatchIds = batches.length > 0 ? [batches[0].batch_id] : [];
+          this.$nextTick(function() { lucide.createIcons(); });
+        },
+
+        getFilteredDraftModalViral: function() {
+          var q = (this.draftAccModal.viralSearch || '').toLowerCase().trim();
+          if (!q) return this.viralLibrary;
+          return this.viralLibrary.filter(function(v) {
+            return (v.title && v.title.toLowerCase().indexOf(q) !== -1) ||
+                   (v.extracted_username && v.extracted_username.toLowerCase().indexOf(q) !== -1) ||
+                   (v.chains_json && v.chains_json.toLowerCase().indexOf(q) !== -1);
+          });
+        },
+
+        selectDraftModalViral: function(viralId) {
+          this.draftAccModal.data.viral_id = viralId;
+          this.draftAccModal.viralDropdownOpen = false;
+          this.draftAccModal.viralSearch = '';
+          this.applyViralReferenceToDraftModal();
+          this.$nextTick(function() { lucide.createIcons(); });
+        },
+
+        getDraftProductBatches: function() {
           var pId = this.draftAccModal.data.product_id;
           if (!pId) return [];
-          return this.mediaFiles.filter(function(m) { return m.product_id === pId; });
+          return this.getBatchesForProduct(pId);
+        },
+
+        toggleDraftAccBatch: function(batchId) {
+          var idx = this.draftAccModal.openBatchIds.indexOf(batchId);
+          if (idx !== -1) {
+            this.draftAccModal.openBatchIds.splice(idx, 1);
+          } else {
+            this.draftAccModal.openBatchIds.push(batchId);
+          }
+          this.$nextTick(function() { lucide.createIcons(); });
+        },
+
+        isDraftAccBatchOpen: function(batchId) {
+          return this.draftAccModal.openBatchIds.indexOf(batchId) !== -1;
+        },
+
+        isAllDraftBatchMediaSelected: function(chainIdx, batchId) {
+          var chain = this.draftAccModal.chains[chainIdx];
+          if (!chain || !Array.isArray(chain.media_urls)) return false;
+          var bMedia = this.getMediaForBatch(batchId);
+          if (bMedia.length === 0) return false;
+          return bMedia.every(function(m) {
+            return chain.media_urls.indexOf(m.cloudinary_url) !== -1;
+          });
+        },
+
+        toggleSelectAllDraftBatchMedia: function(chainIdx, batchId) {
+          var chain = this.draftAccModal.chains[chainIdx];
+          if (!chain) return;
+          if (!Array.isArray(chain.media_urls)) chain.media_urls = [];
+          var bMedia = this.getMediaForBatch(batchId);
+          if (bMedia.length === 0) return;
+          var allSelected = this.isAllDraftBatchMediaSelected(chainIdx, batchId);
+          if (allSelected) {
+            var batchUrls = bMedia.map(function(m) { return m.cloudinary_url; });
+            chain.media_urls = chain.media_urls.filter(function(u) {
+              return batchUrls.indexOf(u) === -1;
+            });
+          } else {
+            for (var i = 0; i < bMedia.length; i++) {
+              var u = bMedia[i].cloudinary_url;
+              if (chain.media_urls.indexOf(u) === -1) {
+                chain.media_urls.push(u);
+              }
+            }
+          }
+          this.$nextTick(function() { lucide.createIcons(); });
         },
 
         isDraftMediaSelected: function(chainIdx, mediaUrl) {
@@ -6335,6 +6792,11 @@
         openAddDraftAccModal: function() {
           this.draftAccModal.isEdit = false;
           this.draftAccModal.loading = false;
+          this.draftAccModal.productDropdownOpen = false;
+          this.draftAccModal.viralDropdownOpen = false;
+          this.draftAccModal.productSearch = '';
+          this.draftAccModal.viralSearch = '';
+          this.draftAccModal.openBatchIds = [];
           this.draftAccModal.data = {
             draft_id: '',
             account_id: this.accounts.length > 0 ? this.accounts[0].account_id : '',
@@ -6355,6 +6817,12 @@
         openEditDraftAccModal: function(draft) {
           this.draftAccModal.isEdit = true;
           this.draftAccModal.loading = false;
+          this.draftAccModal.productDropdownOpen = false;
+          this.draftAccModal.viralDropdownOpen = false;
+          this.draftAccModal.productSearch = '';
+          this.draftAccModal.viralSearch = '';
+          var batches = draft.product_id ? this.getBatchesForProduct(draft.product_id) : [];
+          this.draftAccModal.openBatchIds = batches.length > 0 ? [batches[0].batch_id] : [];
           this.draftAccModal.data = {
             draft_id: draft.draft_id,
             account_id: draft.account_id || '',
@@ -6878,27 +7346,58 @@
           return isNaN(pct) ? 0 : pct;
         },
 
-        getPostMetric: function(postId, metricKey) {
-          var chains = this.getPostChains(postId);
-          if (chains.length === 0) return 0;
-          var rootChain = chains[0];
-          var rootThId = String(rootChain.threads_post_id || '').trim();
-          var rootChainId = String(rootChain.chain_id || '').trim();
+        getPostMetric: function(identifier, metricKey) {
+          if (!identifier) return 0;
+          var idStr = String(identifier).trim();
+          // 1. Cek langsung pencocokan ID unik utas (threads_post_id, chain_id, atau analytics_id)
           var ana = this.postAnalytics.find(function(a) {
-            return (rootThId && String(a.threads_post_id) === rootThId) || String(a.chain_id) === rootChainId || String(a.threads_post_id) === rootChainId;
+            return (a.threads_post_id && String(a.threads_post_id).trim() === idStr) ||
+                   (a.chain_id && String(a.chain_id).trim() === idStr) ||
+                   (a.analytics_id && String(a.analytics_id).trim() === idStr);
           });
-          return ana ? (ana[metricKey + '_count'] || 0) : 0;
+          if (ana) {
+            return ana[metricKey + '_count'] || 0;
+          }
+          // 2. Fallback pencarian melalui grup postingan
+          var chains = this.getPostChains(idStr);
+          if (chains.length > 0) {
+            for (var c = 0; c < chains.length; c++) {
+              var thId = String(chains[c].threads_post_id || '').trim();
+              var chId = String(chains[c].chain_id || '').trim();
+              var matched = this.postAnalytics.find(function(a) {
+                return (thId && String(a.threads_post_id).trim() === thId) ||
+                       (chId && String(a.chain_id).trim() === chId);
+              });
+              if (matched) return matched[metricKey + '_count'] || 0;
+            }
+          }
+          return 0;
         },
 
-        getPostLastSynced: function(postId) {
-          var chains = this.getPostChains(postId);
-          if (chains.length === 0) return '';
-          var rootChain = chains[0];
-          var rootThId = String(rootChain.threads_post_id || '').trim();
-          var rootChainId = String(rootChain.chain_id || '').trim();
+        getPostLastSynced: function(identifier) {
+          if (!identifier) return '';
+          var idStr = String(identifier).trim();
           var ana = this.postAnalytics.find(function(a) {
-            return (rootThId && String(a.threads_post_id) === rootThId) || String(a.chain_id) === rootChainId || String(a.threads_post_id) === rootChainId;
+            return (a.threads_post_id && String(a.threads_post_id).trim() === idStr) ||
+                   (a.chain_id && String(a.chain_id).trim() === idStr);
           });
+          if (!ana) {
+            var chains = this.getPostChains(idStr);
+            if (chains.length > 0) {
+              for (var c = 0; c < chains.length; c++) {
+                var thId = String(chains[c].threads_post_id || '').trim();
+                var chId = String(chains[c].chain_id || '').trim();
+                var matched = this.postAnalytics.find(function(a) {
+                  return (thId && String(a.threads_post_id).trim() === thId) ||
+                         (chId && String(a.chain_id).trim() === chId);
+                });
+                if (matched && matched.last_synced_at) {
+                  ana = matched;
+                  break;
+                }
+              }
+            }
+          }
           if (!ana || !ana.last_synced_at) return '';
           return this.formatTimeAgo(ana.last_synced_at);
         },
@@ -7110,7 +7609,11 @@
         },
 
         getMediaForBatch: function(batchId) {
-          return this.mediaFiles.filter(function(m) { return m.batch_id === batchId; });
+          var list = this.mediaFiles.filter(function(m) { return m.batch_id === batchId; });
+          list.sort(function(a, b) {
+            return (Number(a.sequence_order || 0) - Number(b.sequence_order || 0));
+          });
+          return list;
         },
 
         selectAllPickerMedia: function() {
@@ -7168,20 +7671,34 @@
         },
 
         shiftMediaPosition: function(mediaId, direction) {
-          var idx = this.mediaFiles.findIndex(function(m) { return m.media_id === mediaId; });
-          if (idx === -1) return;
-          var newIdx = idx + direction;
-          if (newIdx < 0 || newIdx >= this.mediaFiles.length) return;
-          var temp = this.mediaFiles[idx];
-          this.mediaFiles[idx] = this.mediaFiles[newIdx];
-          this.mediaFiles[newIdx] = temp;
+          var current = this.mediaFiles.find(function(m) { return m.media_id === mediaId; });
+          if (!current) return;
+          var batchList = this.getMediaForBatch(current.batch_id);
+          var bIdx = batchList.findIndex(function(m) { return m.media_id === mediaId; });
+          if (bIdx === -1) return;
+          var targetBIdx = bIdx + direction;
+          if (targetBIdx < 0 || targetBIdx >= batchList.length) return;
+
+          var neighbor = batchList[targetBIdx];
+          var tempSeq = current.sequence_order;
+          current.sequence_order = neighbor.sequence_order;
+          neighbor.sequence_order = tempSeq;
 
           var self = this;
           google.script.run
             .withSuccessHandler(function(res) {
-              if (res.ok) {
-                self.showToast('Urutan media tersimpan permanen!');
+              if (res && res.ok) {
+                self.showToast(res.message || 'Urutan media berhasil diperbarui!');
+                self.refreshAllData();
+              } else {
+                self.showToast(res ? res.message : 'Gagal memperbarui urutan', 'error');
+                self.refreshAllData();
               }
+              self.$nextTick(function() { lucide.createIcons(); });
+            })
+            .withFailureHandler(function(err) {
+              self.showToast('Error: ' + err.message, 'error');
+              self.refreshAllData();
             })
             .reorderMediaFile(mediaId, direction);
         },
@@ -7256,9 +7773,27 @@
 
         formatAccountWindow: function(acc) {
           if (!acc) return '08:00 - 22:00';
-          var start = this.formatTimeOnly(acc.window_start, '08:00');
-          var end = this.formatTimeOnly(acc.window_end, '22:00');
-          return start + ' - ' + end;
+          var wins = [];
+          try {
+            wins = typeof acc.posting_windows === 'string' ? JSON.parse(acc.posting_windows) : (acc.posting_windows || []);
+          } catch (e) { wins = []; }
+          if (!Array.isArray(wins) || wins.length === 0) {
+            return '08:00 - 22:00';
+          }
+          return wins.map(function(w) {
+            return (w.start || '08:00') + '-' + (w.end || '22:00');
+          }).join(', ');
+        },
+
+        addAccountPostingWindow: function() {
+          this.accountModal.posting_windows.push({ start: '08:00', end: '12:00' });
+          this.$nextTick(function() { lucide.createIcons(); });
+        },
+
+        removeAccountPostingWindow: function(index) {
+          if (this.accountModal.posting_windows.length <= 1) return;
+          this.accountModal.posting_windows.splice(index, 1);
+          this.$nextTick(function() { lucide.createIcons(); });
         },
 
         formatRupiah: function(num) {
@@ -7342,8 +7877,8 @@
           this.accountModal.token = '';
           this.accountModal.category = 'General';
           this.accountModal.account_persona = '';
-          this.accountModal.window_start = '08:00';
-          this.accountModal.window_end = '22:00';
+          this.accountModal.posting_windows = [{ start: '08:00', end: '22:00' }];
+          this.accountModal.daily_max_posts = 30;
           this.accountModal.show = true;
           this.$nextTick(function() { lucide.createIcons(); });
         },
@@ -7354,21 +7889,37 @@
           this.accountModal.token = '';
           this.accountModal.category = acc.category || 'General';
           this.accountModal.account_persona = acc.account_persona || '';
-          this.accountModal.window_start = this.formatTimeOnly(acc.window_start, '08:00');
-          this.accountModal.window_end = this.formatTimeOnly(acc.window_end, '22:00');
+          var wins = [];
+          try {
+            wins = typeof acc.posting_windows === 'string' ? JSON.parse(acc.posting_windows) : (acc.posting_windows || []);
+          } catch (e) { wins = []; }
+          if (!Array.isArray(wins) || wins.length === 0) {
+            wins = [{ start: '08:00', end: '22:00' }];
+          }
+          this.accountModal.posting_windows = wins;
+          this.accountModal.daily_max_posts = Number(acc.daily_max_posts) || 30;
           this.accountModal.show = true;
           this.$nextTick(function() { lucide.createIcons(); });
         },
 
         submitAccountForm: function() {
           var self = this;
+          var cleanWindows = this.accountModal.posting_windows.map(function(w) {
+            return {
+              start: w.start ? String(w.start).trim() : '08:00',
+              end: w.end ? String(w.end).trim() : '22:00'
+            };
+          });
+          var windowsJson = JSON.stringify(cleanWindows);
+          var dailyMax = Number(this.accountModal.daily_max_posts) || 30;
+
           if (this.accountModal.isEdit) {
             this.accountModal.loading = true;
             google.script.run
               .withSuccessHandler(function(res) {
                 self.accountModal.loading = false;
                 if (res.ok) {
-                  self.showToast('Data akun & jam jendela berhasil diperbarui!');
+                  self.showToast('Data akun, multi-jendela, dan batas harian berhasil diperbarui!');
                   self.accountModal.show = false;
                   self.refreshAllData();
                 } else {
@@ -7383,8 +7934,8 @@
                 account_id: this.accountModal.accountId,
                 category: this.accountModal.category,
                 account_persona: this.accountModal.account_persona,
-                window_start: this.accountModal.window_start || '08:00',
-                window_end: this.accountModal.window_end || '22:00'
+                posting_windows: windowsJson,
+                daily_max_posts: dailyMax
               });
           } else {
             if (!this.accountModal.token.trim()) {
@@ -7411,8 +7962,8 @@
                 this.accountModal.token.trim(),
                 this.accountModal.category,
                 this.accountModal.account_persona,
-                this.accountModal.window_start || '08:00',
-                this.accountModal.window_end || '22:00'
+                windowsJson,
+                dailyMax
               );
           }
         },
@@ -7765,16 +8316,23 @@
         },
 
         openComposerIdeaBankModal: function() {
+          var effProdId = this.getEffectiveComposerProductId();
+          if (effProdId && !this.composer.product_id) {
+            this.composer.product_id = effProdId;
+          }
           this.composerIdeaBankModal.search = '';
           this.composerIdeaBankModal.categoryFilter = '';
-          this.composerIdeaBankModal.filterScope = this.composer.product_id ? 'product' : 'all';
+          this.composerIdeaBankModal.filterScope = effProdId ? 'product' : 'all';
           this.composerIdeaBankModal.show = true;
           this.$nextTick(function() { lucide.createIcons(); });
         },
 
         get filteredComposerViralLibrary() {
+          var curProductId = this.getEffectiveComposerProductId();
           var scope = this.composerIdeaBankModal.filterScope;
-          var curProductId = this.composer.product_id;
+          if (scope === 'product' && !curProductId) {
+            scope = 'all';
+          }
           var q = (this.composerIdeaBankModal.search || '').toLowerCase().trim();
           var self = this;
 
@@ -8111,12 +8669,16 @@
 
         getPickerMediaForBatch: function(batchId) {
           var filter = this.mediaPickerTypeFilter;
-          return this.mediaFiles.filter(function(m) {
+          var list = this.mediaFiles.filter(function(m) {
             var matchBatch = m.batch_id === batchId;
             if (!matchBatch) return false;
             if (filter === 'ALL') return true;
             return m.media_type === filter;
           });
+          list.sort(function(a, b) {
+            return (Number(a.sequence_order || 0) - Number(b.sequence_order || 0));
+          });
+          return list;
         },
 
         selectBatchMedia: function(batchId) {

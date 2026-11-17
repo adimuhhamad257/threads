@@ -156,7 +156,7 @@ function setupDatabase() {
   var schemas = [
     {
       name: 'Accounts',
-      headers: ['account_id', 'meta_user_id', 'username', 'name', 'profile_picture_url', 'access_token', 'token_expires_at', 'is_active', 'category', 'account_persona', 'window_start', 'window_end', 'created_at']
+      headers: ['account_id', 'meta_user_id', 'username', 'name', 'profile_picture_url', 'access_token', 'token_expires_at', 'is_active', 'category', 'account_persona', 'posting_windows', 'daily_max_posts', 'created_at']
     },
     {
       name: 'Products',
@@ -164,11 +164,11 @@ function setupDatabase() {
     },
     {
       name: 'Media_Batches',
-      headers: ['batch_id', 'product_id', 'batch_number', 'created_at']
+      headers: ['batch_id', 'product_id', 'created_at']
     },
     {
       name: 'Media_Files',
-      headers: ['media_id', 'batch_id', 'product_id', 'media_type', 'cloudinary_url', 'thumbnail_url', 'cloudinary_public_id', 'created_at']
+      headers: ['media_id', 'sequence_order', 'batch_id', 'product_id', 'media_type', 'cloudinary_url', 'thumbnail_url', 'cloudinary_public_id', 'created_at']
     },
     {
       name: 'Queue_Posts',
@@ -263,8 +263,59 @@ function setupDatabase() {
 
   ensureRepliedColumn(ss);
   ensureNormalizedQueueColumns(ss);
+  ensureAccountColumns(ss);
 
   return { ok: true, message: 'Database schema successfully initialized/updated.' };
+}
+
+/**
+ * Memastikan skema tabel Accounts termutakhirkan dengan posting_windows dan daily_max_posts
+ */
+function ensureAccountColumns(ss) {
+  if (!ss) ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = ss.getSheetByName('Accounts');
+  if (!sheet) return;
+  var lastCol = sheet.getLastColumn();
+  if (lastCol === 0) return;
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var wsIdx = headers.indexOf('window_start');
+  var weIdx = headers.indexOf('window_end');
+  var pwIdx = headers.indexOf('posting_windows');
+  var dmpIdx = headers.indexOf('daily_max_posts');
+
+  var targetHeaders = ['account_id', 'meta_user_id', 'username', 'name', 'profile_picture_url', 'access_token', 'token_expires_at', 'is_active', 'category', 'account_persona', 'posting_windows', 'daily_max_posts', 'created_at'];
+
+  if (pwIdx === -1 || dmpIdx === -1 || wsIdx !== -1 || weIdx !== -1) {
+    var data = sheet.getDataRange().getValues();
+    var migrated = [targetHeaders];
+    for (var r = 1; r < data.length; r++) {
+      var row = data[r];
+      var rowObj = {};
+      for (var h = 0; h < headers.length; h++) {
+        rowObj[headers[h]] = row[h];
+      }
+      var defaultWin = [{ start: cleanTimeString(rowObj['window_start'], '08:00'), end: cleanTimeString(rowObj['window_end'], '22:00') }];
+      var pw = rowObj['posting_windows'] || JSON.stringify(defaultWin);
+      var dmp = Number(rowObj['daily_max_posts'] || 30);
+      migrated.push([
+        rowObj['account_id'] || '',
+        rowObj['meta_user_id'] || '',
+        rowObj['username'] || '',
+        rowObj['name'] || '',
+        rowObj['profile_picture_url'] || '',
+        rowObj['access_token'] || '',
+        rowObj['token_expires_at'] || '',
+        rowObj['is_active'] || 'TRUE',
+        rowObj['category'] || 'General',
+        rowObj['account_persona'] || '',
+        typeof pw === 'string' ? pw : JSON.stringify(pw),
+        dmp,
+        rowObj['created_at'] || new Date().toISOString()
+      ]);
+    }
+    sheet.clearContents();
+    sheet.getRange(1, 1, migrated.length, targetHeaders.length).setValues(migrated);
+  }
 }
 
 /**
@@ -491,7 +542,8 @@ function getInitialData() {
         reply_to_meta_id: t.reply_to_meta_id || '',
         threads_post_id: t.threads_post_id || '',
         permalink: t.permalink || '',
-        published_at: t.published_at || ''
+        published_at: t.published_at || '',
+        status: t.status || (t.threads_post_id ? 'Published' : 'Scheduled')
       });
     }
 
@@ -543,6 +595,7 @@ function getInitialData() {
         status: overallStatus,
         scheduled_at: root.scheduled_at || '',
         view_check_until: root.view_check_until || (threads[1] ? threads[1].view_check_until : ''),
+        root_status: root.status || (root.threads_post_id ? 'Published' : 'Scheduled'),
         is_evergreen: root.is_evergreen || 'FALSE',
         error_log: combinedErrorLog,
         created_at: root.created_at || '',
@@ -561,7 +614,8 @@ function getInitialData() {
             reply_to_meta_id: th.reply_to_meta_id || '',
             threads_post_id: th.threads_post_id || '',
             permalink: th.permalink || '',
-            published_at: th.published_at || ''
+            published_at: th.published_at || '',
+            status: th.status || (th.threads_post_id ? 'Published' : 'Scheduled')
           };
         })
       };
@@ -611,7 +665,7 @@ function getInitialData() {
 /**
  * Meta Threads Graph API Account Verification & Sync
  */
-function addOrSyncAccount(accessToken, category, accountPersona, windowStart, windowEnd) {
+function addOrSyncAccount(accessToken, category, accountPersona, postingWindows, dailyMaxPosts) {
   try {
     var url = 'https://graph.threads.net/v1.0/me?fields=id,username,name,threads_profile_picture_url&access_token=' + accessToken;
     var resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
@@ -622,34 +676,31 @@ function addOrSyncAccount(accessToken, category, accountPersona, windowStart, wi
     }
 
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    ensureAccountColumns(ss);
     var sheet = ss.getSheetByName('Accounts');
     var rows = sheet.getDataRange().getValues();
     var headers = rows[0];
 
-    // Pastikan kolom window_start dan window_end ada
-    var wsCol = headers.indexOf('window_start');
-    var weCol = headers.indexOf('window_end');
-    if (wsCol === -1) {
-      sheet.getRange(1, headers.length + 1).setValue('window_start');
-      headers.push('window_start');
-    }
-    if (weCol === -1) {
-      sheet.getRange(1, headers.length + 1).setValue('window_end');
-      headers.push('window_end');
-    }
-    rows = sheet.getDataRange().getValues();
-    headers = rows[0];
-
     var nowIso = new Date().toISOString();
     var expiryDate = new Date();
-    expiryDate.setDate(expiryDate.getDate() + 60); // 60 days default
+    expiryDate.setDate(expiryDate.getDate() + 60);
 
     var accountId = 'acc_' + Utilities.getUuid().slice(0, 8);
     var rowIdxToUpdate = -1;
     var defaultCategory = category || 'General';
     var defaultPersona = accountPersona || '';
-    var defaultWStart = cleanTimeString(windowStart, '08:00');
-    var defaultWEnd = cleanTimeString(windowEnd, '22:00');
+
+    var windowsArr = [];
+    if (typeof postingWindows === 'string') {
+      try { windowsArr = JSON.parse(postingWindows); } catch (e) { windowsArr = []; }
+    } else if (Array.isArray(postingWindows)) {
+      windowsArr = postingWindows;
+    }
+    if (!windowsArr || windowsArr.length === 0) {
+      windowsArr = [{ start: '08:00', end: '22:00' }];
+    }
+    var windowsJson = JSON.stringify(windowsArr);
+    var maxPosts = Number(dailyMaxPosts) || 30;
 
     for (var i = 1; i < rows.length; i++) {
       if (String(rows[i][1]) === String(data.id)) {
@@ -657,10 +708,10 @@ function addOrSyncAccount(accessToken, category, accountPersona, windowStart, wi
         accountId = rows[i][0];
         if (!category && rows[i][8]) defaultCategory = rows[i][8];
         if (!accountPersona && rows[i][9]) defaultPersona = rows[i][9];
-        var existingWsIdx = headers.indexOf('window_start');
-        var existingWeIdx = headers.indexOf('window_end');
-        if (!windowStart && existingWsIdx >= 0 && rows[i][existingWsIdx]) defaultWStart = cleanTimeString(rows[i][existingWsIdx], '08:00');
-        if (!windowEnd && existingWeIdx >= 0 && rows[i][existingWeIdx]) defaultWEnd = cleanTimeString(rows[i][existingWeIdx], '22:00');
+        var pwCol = headers.indexOf('posting_windows');
+        var dmpCol = headers.indexOf('daily_max_posts');
+        if (!postingWindows && pwCol >= 0 && rows[i][pwCol]) windowsJson = String(rows[i][pwCol]);
+        if (!dailyMaxPosts && dmpCol >= 0 && rows[i][dmpCol]) maxPosts = Number(rows[i][dmpCol]) || 30;
         break;
       }
     }
@@ -676,8 +727,8 @@ function addOrSyncAccount(accessToken, category, accountPersona, windowStart, wi
       is_active: 'TRUE',
       category: defaultCategory,
       account_persona: defaultPersona,
-      window_start: defaultWStart,
-      window_end: defaultWEnd,
+      posting_windows: windowsJson,
+      daily_max_posts: maxPosts,
       created_at: nowIso
     };
 
@@ -689,14 +740,9 @@ function addOrSyncAccount(accessToken, category, accountPersona, windowStart, wi
 
     if (rowIdxToUpdate > 0) {
       sheet.getRange(rowIdxToUpdate, 1, 1, updateRow.length).setValues([updateRow]);
-      if (wsCol >= 0) sheet.getRange(rowIdxToUpdate, wsCol + 1).setNumberFormat('@').setValue(defaultWStart);
-      if (weCol >= 0) sheet.getRange(rowIdxToUpdate, weCol + 1).setNumberFormat('@').setValue(defaultWEnd);
       return { ok: true, message: 'Akun @' + data.username + ' sudah terdaftar & token berhasil diperbarui!', data: { account_id: accountId, username: data.username } };
     } else {
       sheet.appendRow(updateRow);
-      var newLastRow = sheet.getLastRow();
-      if (wsCol >= 0) sheet.getRange(newLastRow, wsCol + 1).setNumberFormat('@').setValue(defaultWStart);
-      if (weCol >= 0) sheet.getRange(newLastRow, weCol + 1).setNumberFormat('@').setValue(defaultWEnd);
       return { ok: true, message: 'Akun @' + data.username + ' berhasil ditambahkan!', data: { account_id: accountId, username: data.username } };
     }
   } catch (err) {
@@ -707,34 +753,29 @@ function addOrSyncAccount(accessToken, category, accountPersona, windowStart, wi
 function updateAccountDetails(accountData) {
   try {
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    ensureAccountColumns(ss);
     var sheet = ss.getSheetByName('Accounts');
     var values = sheet.getDataRange().getValues();
     var headers = values[0];
     var idCol = headers.indexOf('account_id');
     var catCol = headers.indexOf('category');
     var perCol = headers.indexOf('account_persona');
-    var wsCol = headers.indexOf('window_start');
-    var weCol = headers.indexOf('window_end');
-
-    if (wsCol === -1) {
-      sheet.getRange(1, headers.length + 1).setValue('window_start');
-      headers.push('window_start');
-      wsCol = headers.length - 1;
-    }
-    if (weCol === -1) {
-      sheet.getRange(1, headers.length + 1).setValue('window_end');
-      headers.push('window_end');
-      weCol = headers.length - 1;
-    }
+    var pwCol = headers.indexOf('posting_windows');
+    var dmpCol = headers.indexOf('daily_max_posts');
 
     for (var i = 1; i < values.length; i++) {
       if (String(values[i][idCol >= 0 ? idCol : 0]) === String(accountData.account_id)) {
         var row = i + 1;
         if (accountData.category !== undefined && catCol >= 0) sheet.getRange(row, catCol + 1).setValue(accountData.category);
         if (accountData.account_persona !== undefined && perCol >= 0) sheet.getRange(row, perCol + 1).setValue(accountData.account_persona);
-        if (accountData.window_start !== undefined && wsCol >= 0) sheet.getRange(row, wsCol + 1).setNumberFormat('@').setValue(cleanTimeString(accountData.window_start, '08:00'));
-        if (accountData.window_end !== undefined && weCol >= 0) sheet.getRange(row, weCol + 1).setNumberFormat('@').setValue(cleanTimeString(accountData.window_end, '22:00'));
-        return { ok: true, message: 'Persona, kategori, dan jam jendela akun berhasil diperbarui' };
+        if (accountData.posting_windows !== undefined && pwCol >= 0) {
+          var pwVal = typeof accountData.posting_windows === 'string' ? accountData.posting_windows : JSON.stringify(accountData.posting_windows || []);
+          sheet.getRange(row, pwCol + 1).setValue(pwVal);
+        }
+        if (accountData.daily_max_posts !== undefined && dmpCol >= 0) {
+          sheet.getRange(row, dmpCol + 1).setValue(Number(accountData.daily_max_posts) || 30);
+        }
+        return { ok: true, message: 'Pengaturan akun, jendela posting, dan batas harian berhasil diperbarui' };
       }
     }
     return { ok: false, message: 'Akun tidak ditemukan' };
@@ -1117,55 +1158,159 @@ function reorderMediaFile(mediaId, direction) {
   try {
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     var sheet = ss.getSheetByName('Media_Files');
+    if (!sheet) return { ok: false, message: 'Sheet Media_Files tidak ditemukan' };
     var values = sheet.getDataRange().getValues();
-    var idx = -1;
+    if (values.length <= 1) return { ok: false, message: 'Media tidak ditemukan' };
+
+    var headers = values[0];
+    var idCol = headers.indexOf('media_id');
+    var seqCol = headers.indexOf('sequence_order');
+    var batchCol = headers.indexOf('batch_id');
+
+    if (idCol === -1) idCol = 0;
+    if (batchCol === -1) batchCol = 2;
+
+    if (seqCol === -1) {
+      sheet.getRange(1, headers.length + 1).setValue('sequence_order');
+      headers.push('sequence_order');
+      seqCol = headers.length - 1;
+      values = sheet.getDataRange().getValues();
+    }
+
+    // 1. Cari baris milik mediaId yang dituju. Dapatkan batch_id dan sequence_order saat ini (Posisi A)
+    var rowAIndex = -1;
+    var targetBatchId = '';
+    var posA = 0;
+
     for (var i = 1; i < values.length; i++) {
-      if (String(values[i][0]) === String(mediaId)) {
-        idx = i;
+      if (String(values[i][idCol]) === String(mediaId)) {
+        rowAIndex = i + 1;
+        targetBatchId = String(values[i][batchCol]);
+        posA = Number(values[i][seqCol]);
         break;
       }
     }
-    if (idx === -1) return { ok: false, message: 'Media tidak ditemukan' };
 
-    var targetIdx = idx + direction;
-    if (targetIdx < 1 || targetIdx >= values.length) {
+    if (rowAIndex === -1) return { ok: false, message: 'Media tidak ditemukan' };
+
+    // Kumpulkan semua media di dalam batch_id yang sama untuk validasi urutan
+    var batchItems = [];
+    for (var j = 1; j < values.length; j++) {
+      if (String(values[j][batchCol]) === targetBatchId) {
+        batchItems.push({
+          row: j + 1,
+          id: String(values[j][idCol]),
+          seq: Number(values[j][seqCol])
+        });
+      }
+    }
+
+    // Normalisasi jika urutan dalam batch belum 1..N (misal karena residu nomor baris sebelumnya)
+    batchItems.sort(function(a, b) {
+      if (isNaN(a.seq) || a.seq <= 0) return 1;
+      if (isNaN(b.seq) || b.seq <= 0) return -1;
+      return a.seq - b.seq;
+    });
+
+    var needsRepair = false;
+    for (var n = 0; n < batchItems.length; n++) {
+      if (batchItems[n].seq !== n + 1) {
+        needsRepair = true;
+        break;
+      }
+    }
+
+    if (needsRepair) {
+      for (var r = 0; r < batchItems.length; r++) {
+        batchItems[r].seq = r + 1;
+        sheet.getRange(batchItems[r].row, seqCol + 1).setValue(r + 1);
+        if (batchItems[r].id === String(mediaId)) {
+          posA = r + 1;
+        }
+      }
+    }
+
+    // 2. Hitung target urutan: target_order = Posisi A + direction
+    var targetOrder = posA + Number(direction);
+    if (targetOrder < 1 || targetOrder > batchItems.length) {
       return { ok: false, message: 'Posisi media sudah berada di ujung' };
     }
 
-    var rowA = values[idx];
-    var rowB = values[targetIdx];
-    sheet.getRange(idx + 1, 1, 1, rowA.length).setValues([rowB]);
-    sheet.getRange(targetIdx + 1, 1, 1, rowB.length).setValues([rowA]);
+    // 3. Cari baris media lain dalam batch_id yang sama dengan sequence_order persis sama dengan target_order (Posisi B)
+    var rowBIndex = -1;
+    for (var k = 0; k < batchItems.length; k++) {
+      if (batchItems[k].seq === targetOrder) {
+        rowBIndex = batchItems[k].row;
+        break;
+      }
+    }
 
+    if (rowBIndex === -1) {
+      return { ok: false, message: 'Media tetangga untuk pertukaran tidak ditemukan' };
+    }
+
+    // 4. Lakukan penimpaan (SWAP): Ubah sequence_order baris A -> target_order, baris B -> Posisi A
+    sheet.getRange(rowAIndex, seqCol + 1).setValue(targetOrder);
+    sheet.getRange(rowBIndex, seqCol + 1).setValue(posA);
+
+    SpreadsheetApp.flush();
     return { ok: true, message: 'Urutan media berhasil diperbarui' };
   } catch (err) {
     return { ok: false, message: err.message };
   }
 }
 
-function saveMediaBatch(productId, mediaFiles) {
+function saveMediaBatch(productId, mediaFiles, targetBatchId) {
   try {
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    var batchId = 'batch_' + Utilities.getUuid().slice(0, 8);
+    var batchId = targetBatchId || ('batch_' + Utilities.getUuid().slice(0, 8));
     var nowIso = new Date().toISOString();
 
     var batchSheet = ss.getSheetByName('Media_Batches');
-    var batchNumber = batchSheet.getLastRow();
-    batchSheet.appendRow([batchId, productId, batchNumber, nowIso]);
+    if (!targetBatchId && batchSheet) {
+      var bHeaders = batchSheet.getRange(1, 1, 1, batchSheet.getLastColumn()).getValues()[0];
+      var bRow = [];
+      for (var bh = 0; bh < bHeaders.length; bh++) {
+        var bKey = bHeaders[bh];
+        if (bKey === 'batch_id') bRow.push(batchId);
+        else if (bKey === 'product_id') bRow.push(productId);
+        else if (bKey === 'created_at') bRow.push(nowIso);
+        else bRow.push('');
+      }
+      batchSheet.appendRow(bRow);
+    }
 
     var mediaSheet = ss.getSheetByName('Media_Files');
+    var mData = mediaSheet.getDataRange().getValues();
+    var mHeaders = mData[0];
+    if (mHeaders.indexOf('sequence_order') === -1) {
+      mediaSheet.getRange(1, mHeaders.length + 1).setValue('sequence_order');
+      mHeaders.push('sequence_order');
+      mData = mediaSheet.getDataRange().getValues();
+    }
+
+    var bColIdx = mHeaders.indexOf('batch_id');
+    if (bColIdx === -1) bColIdx = 2;
+
+    // 1. Hitung jumlah baris media yang SUDAH ADA dengan batch_id yang sama
+    var existingInBatchCount = 0;
+    for (var r = 1; r < mData.length; r++) {
+      if (String(mData[r][bColIdx]) === String(batchId)) {
+        existingInBatchCount++;
+      }
+    }
+
+    // 2. Setiap media baru di batch ini berurutan mulai dari (existingInBatchCount + 1)
     for (var i = 0; i < mediaFiles.length; i++) {
       var m = mediaFiles[i];
       var mediaId = 'med_' + Utilities.getUuid().slice(0, 8);
       var cloudUrl = m.cloudinary_url || m.url || '';
       var thumbUrl = m.thumbnail_url || cloudUrl;
 
-      // Otomatis ganti ekstensi video ke .jpg untuk thumbnail preview Cloudinary
       if ((m.media_type === 'VIDEO' || m.type === 'VIDEO') && cloudUrl) {
         thumbUrl = cloudUrl.replace(/\.[^/.]+$/, '.jpg');
       }
 
-      // Pastikan cloudinary_public_id diekstrak dari URL jika tidak dikirim eksplisit
       var pubId = m.cloudinary_public_id || m.public_id || '';
       if (!pubId && cloudUrl) {
         var match = String(cloudUrl).match(/\/upload\/(?:v\d+\/)?([^\.\?#]+)/);
@@ -1175,19 +1320,27 @@ function saveMediaBatch(productId, mediaFiles) {
       }
       if (!pubId) {
         var dateStr = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'ddMMyyyy');
-        pubId = 'media_' + dateStr + '_' + Utilities.getUuid().slice(0, 4) + '_' + (i + 1);
+        pubId = 'media_' + dateStr + '_' + Utilities.getUuid().slice(0, 4) + '_' + (existingInBatchCount + i + 1);
       }
 
-      mediaSheet.appendRow([
-        mediaId,
-        batchId,
-        productId,
-        m.media_type || m.type || 'IMAGE',
-        cloudUrl,
-        thumbUrl,
-        pubId,
-        nowIso
-      ]);
+      var rowObj = {
+        media_id: mediaId,
+        sequence_order: existingInBatchCount + i + 1,
+        batch_id: batchId,
+        product_id: productId,
+        media_type: m.media_type || m.type || 'IMAGE',
+        cloudinary_url: cloudUrl,
+        thumbnail_url: thumbUrl,
+        cloudinary_public_id: pubId,
+        created_at: nowIso
+      };
+
+      var newRow = [];
+      for (var h = 0; h < mHeaders.length; h++) {
+        var key = mHeaders[h];
+        newRow.push(rowObj[key] !== undefined ? rowObj[key] : '');
+      }
+      mediaSheet.appendRow(newRow);
     }
     return { ok: true, batch_id: batchId };
   } catch (err) {
@@ -1494,6 +1647,71 @@ function deletePost(postId) {
 /**
  * Smart Best-Time Posting Algorithm with Per-Account Window & Auto-Staggering
  */
+function isCurrentTimeInWindows(windowsJson, nowTz) {
+  var tz = nowTz || 'Asia/Jakarta';
+  var windows = [];
+  try {
+    windows = typeof windowsJson === 'string' ? JSON.parse(windowsJson) : (windowsJson || []);
+  } catch (e) {
+    windows = [];
+  }
+  if (!Array.isArray(windows) || windows.length === 0) {
+    windows = [{ start: '08:00', end: '22:00' }];
+  }
+
+  var nowStr = Utilities.formatDate(new Date(), tz, 'HH:mm');
+  var nowParts = nowStr.split(':');
+  var nowMinutes = Number(nowParts[0]) * 60 + Number(nowParts[1]);
+
+  for (var i = 0; i < windows.length; i++) {
+    var w = windows[i];
+    if (!w || !w.start || !w.end) continue;
+    var sParts = cleanTimeString(w.start, '08:00').split(':');
+    var eParts = cleanTimeString(w.end, '22:00').split(':');
+    var sMin = Number(sParts[0]) * 60 + Number(sParts[1]);
+    var eMin = Number(eParts[0]) * 60 + Number(eParts[1]);
+
+    if (eMin > sMin) {
+      if (nowMinutes >= sMin && nowMinutes <= eMin) return true;
+    } else if (eMin < sMin) {
+      if (nowMinutes >= sMin || nowMinutes <= eMin) return true;
+    } else {
+      return true;
+    }
+  }
+  return false;
+}
+
+function getAccountTodayPublishedRootCount(accountId, pData, pHeaders, tz) {
+  var targetTz = tz || 'Asia/Jakarta';
+  var todayStr = Utilities.formatDate(new Date(), targetTz, 'yyyy-MM-dd');
+  var count = 0;
+
+  var accCol = pHeaders.indexOf('account_id');
+  var seqCol = pHeaders.indexOf('sequence_order');
+  var pubCol = pHeaders.indexOf('published_at');
+  var stCol = pHeaders.indexOf('status');
+
+  for (var r = 1; r < pData.length; r++) {
+    var row = pData[r];
+    var rowAcc = String(row[accCol] || '').trim();
+    var rowSeq = Number(row[seqCol] || 1);
+    var rowSt = String(row[stCol] || '').trim();
+    var rowPubAt = row[pubCol];
+
+    if (rowAcc === accountId && rowSeq === 1 && (rowSt === 'Published' || !rowSt) && rowPubAt) {
+      var d = rowPubAt instanceof Date ? rowPubAt : new Date(rowPubAt);
+      if (!isNaN(d.getTime())) {
+        var dStr = Utilities.formatDate(d, targetTz, 'yyyy-MM-dd');
+        if (dStr === todayStr) {
+          count++;
+        }
+      }
+    }
+  }
+  return count;
+}
+
 function suggestBestPostingTime(accountId) {
   try {
     var posts = getAllPostsAsJson();
@@ -1505,7 +1723,6 @@ function suggestBestPostingTime(accountId) {
     var tz = settingsMap['timezone'] || 'Asia/Jakarta';
     var staggerMin = Number(settingsMap['auto_stagger_minutes']) || 3;
 
-    // Ambil jam operasional jendela khusus per-akun
     var accounts = readSheetAsJson('Accounts');
     var acc = null;
     for (var a = 0; a < accounts.length; a++) {
@@ -1515,37 +1732,46 @@ function suggestBestPostingTime(accountId) {
       }
     }
 
-    var wStart = (acc && acc.window_start) ? cleanTimeString(acc.window_start, '08:00') : '08:00';
-    var wEnd = (acc && acc.window_end) ? cleanTimeString(acc.window_end, '22:00') : '22:00';
-
-    var sParts = wStart.split(':');
-    var eParts = wEnd.split(':');
-    var startMin = Number(sParts[0]) * 60 + Number(sParts[1]);
-    var endMin = Number(eParts[0]) * 60 + Number(eParts[1]);
-    if (endMin <= startMin) endMin = startMin + 120;
+    var windows = [];
+    if (acc && acc.posting_windows) {
+      try {
+        windows = typeof acc.posting_windows === 'string' ? JSON.parse(acc.posting_windows) : acc.posting_windows;
+      } catch (e) { windows = []; }
+    }
+    if (!Array.isArray(windows) || windows.length === 0) {
+      windows = [{ start: '08:00', end: '22:00' }];
+    }
 
     var now = new Date();
     var nowFormatted = Utilities.formatDate(now, tz, 'yyyy-MM-dd HH:mm');
     var timeParts = nowFormatted.split(' ')[1].split(':');
     var nowMinutes = Number(timeParts[0]) * 60 + Number(timeParts[1]);
 
-    var targetOffsetDays = 0;
-    var targetMinutes = 0;
+    var matchedWindow = null;
+    for (var w = 0; w < windows.length; w++) {
+      var sP = cleanTimeString(windows[w].start, '08:00').split(':');
+      var eP = cleanTimeString(windows[w].end, '22:00').split(':');
+      var sMin = Number(sP[0]) * 60 + Number(sP[1]);
+      var eMin = Number(eP[0]) * 60 + Number(eP[1]);
 
-    if (nowMinutes + 15 < startMin) {
-      targetMinutes = startMin;
-    } else if (nowMinutes + 15 <= endMin) {
-      targetMinutes = nowMinutes + 15;
-    } else {
-      targetOffsetDays = 1;
-      targetMinutes = startMin;
+      if (nowMinutes + 15 < sMin) {
+        matchedWindow = { startMin: sMin, endMin: eMin, offsetDays: 0, label: windows[w].start + '-' + windows[w].end };
+        break;
+      } else if (nowMinutes + 15 <= eMin) {
+        matchedWindow = { startMin: nowMinutes + 15, endMin: eMin, offsetDays: 0, label: windows[w].start + '-' + windows[w].end };
+        break;
+      }
     }
 
-    // Variasi jitter 1 - 5 menit anti bot fingerprinting
-    var jitter = Math.floor(Math.random() * 5) + 1;
-    targetMinutes += jitter;
+    if (!matchedWindow) {
+      var firstW = windows[0];
+      var fSP = cleanTimeString(firstW.start, '08:00').split(':');
+      var fMin = Number(fSP[0]) * 60 + Number(fSP[1]);
+      matchedWindow = { startMin: fMin, endMin: fMin + 60, offsetDays: 1, label: firstW.start + '-' + firstW.end };
+    }
 
-    var targetBase = new Date(now.getTime() + targetOffsetDays * 24 * 60 * 60 * 1000);
+    var targetMinutes = matchedWindow.startMin + Math.floor(Math.random() * 5) + 1;
+    var targetBase = new Date(now.getTime() + matchedWindow.offsetDays * 24 * 60 * 60 * 1000);
     var baseDateStr = Utilities.formatDate(targetBase, tz, 'yyyy/MM/dd');
     var targetHour = Math.floor(targetMinutes / 60);
     var targetMinute = targetMinutes % 60;
@@ -1555,7 +1781,6 @@ function suggestBestPostingTime(accountId) {
       candidateDate = new Date(now.getTime() + 15 * 60 * 1000);
     }
 
-    // Hindari tabrakan dengan pos akun lain dengan toleransi jeda auto_stagger_minutes
     var collisionFound = true;
     var loops = 0;
     while (collisionFound && loops < 30) {
@@ -1580,7 +1805,7 @@ function suggestBestPostingTime(accountId) {
       ok: true,
       data: {
         suggested_time: finalFormatted,
-        reason: 'Jendela @' + (acc ? acc.username : 'akun') + ' (' + wStart + '-' + wEnd + ') + jeda ' + staggerMin + ' mnt'
+        reason: 'Jendela @' + (acc ? acc.username : 'akun') + ' (' + matchedWindow.label + ') + jeda ' + staggerMin + ' mnt'
       }
     };
   } catch (err) {
@@ -2408,7 +2633,7 @@ function syncSinglePostInsights(postId) {
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     var allThreads = [].concat(readSheetAsJson('Queue_Posts'), readSheetAsJson('Published_Posts'));
     var targetThreads = allThreads.filter(function(t) {
-      return String(t.chain_group_id) === String(postId) || String(t.post_id) === String(postId);
+      return String(t.chain_group_id) === String(postId) || String(t.post_id) === String(postId) || String(t.threads_post_id) === String(postId);
     });
     if (targetThreads.length === 0) return { ok: false, message: 'Postingan tidak ditemukan' };
 
@@ -2489,8 +2714,14 @@ function syncPostComments(postId) {
   try {
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     var allThreads = [].concat(readSheetAsJson('Queue_Posts'), readSheetAsJson('Published_Posts'));
+    var allSystemThreadIds = {};
+    for (var at = 0; at < allThreads.length; at++) {
+      var tpid = String(allThreads[at].threads_post_id || '').trim();
+      if (tpid) allSystemThreadIds[tpid] = true;
+    }
+
     var targetThreads = allThreads.filter(function(t) {
-      return String(t.chain_group_id) === String(postId) || String(t.post_id) === String(postId);
+      return String(t.chain_group_id) === String(postId) || String(t.post_id) === String(postId) || String(t.threads_post_id) === String(postId);
     });
     if (targetThreads.length === 0) return { ok: false, message: 'Postingan tidak ditemukan' };
 
@@ -2514,10 +2745,22 @@ function syncPostComments(postId) {
     var thCommIdColIdx = existingHeaders.indexOf('threads_comment_id');
     if (thCommIdColIdx === -1) thCommIdColIdx = 2;
 
+    var rowsToDelete = [];
     var existingIds = {};
     for (var r = 1; r < existingRows.length; r++) {
       var existThId = String(existingRows[r][thCommIdColIdx] || '').trim();
-      if (existThId) existingIds[existThId] = true;
+      if (existThId) {
+        if (allSystemThreadIds[existThId]) {
+          rowsToDelete.push(r + 1);
+        } else {
+          existingIds[existThId] = true;
+        }
+      }
+    }
+    if (rowsToDelete.length > 0) {
+      for (var d = rowsToDelete.length - 1; d >= 0; d--) {
+        commSheet.deleteRow(rowsToDelete[d]);
+      }
     }
 
     var newCommentsCount = 0;
@@ -2534,6 +2777,7 @@ function syncPostComments(postId) {
           for (var m = 0; m < repData.data.length; m++) {
             var rep = repData.data[m];
             var commentThId = String(rep.id || '').trim();
+            if (allSystemThreadIds[commentThId]) continue;
             if (commentThId && !existingIds[commentThId]) {
               var fromUser = rep.username || 'user';
               var isAuthor = String(fromUser).toLowerCase().trim() === authorUsername;
@@ -3369,6 +3613,31 @@ function processPublishingQueue() {
         continue;
       }
 
+      var account = null;
+      for (var ac = 0; ac < accounts.length; ac++) {
+        if (String(accounts[ac].account_id) === accId) {
+          account = accounts[ac];
+          break;
+        }
+      }
+
+      // THROTTLING & JALUR VIP: Batas Kuota Harian & Multi-Jendela Waktu HANYA berlaku untuk Utas #1 (seq === 1).
+      // Utas sambungan (#2+) mendapat JALUR VIP: langsung diterbitkan saat syarat rilis tercapai!
+      if (seq === 1 && account) {
+        var dailyMax = Number(account.daily_max_posts) || 30;
+        var pValuesLatest = pSheet.getDataRange().getValues();
+        var todayPublishedRootCount = getAccountTodayPublishedRootCount(accId, pValuesLatest, pHeaders, 'Asia/Jakarta');
+        if (todayPublishedRootCount >= dailyMax) {
+          Logger.log('Akun @' + (account.username || accId) + ' mencapai limit harian (' + todayPublishedRootCount + '/' + dailyMax + '). Menunda Utas #1 ke hari berikutnya.');
+          continue;
+        }
+
+        var inWindow = isCurrentTimeInWindows(account.posting_windows, 'Asia/Jakarta');
+        if (!inWindow) {
+          continue;
+        }
+      }
+
       var shouldPublish = false;
 
       // 1. Evaluasi Status 'Scheduled' (Logika Jendela Toleransi 5 Menit)
@@ -3387,14 +3656,14 @@ function processPublishingQueue() {
         }
 
         // Keterlambatan sudah lebih dari 5 menit -> BATALKAN eksekusi otomatis & arsipkan ke Published_Posts
-        if (diffMs > FIVE_MIN_MS) {
+        var todayStartMs = new Date(Utilities.formatDate(now, 'Asia/Jakarta', 'yyyy/MM/dd 00:00:00')).getTime();
+        if (diffMs > FIVE_MIN_MS && schedMs >= todayStartMs) {
           var missedMsg = 'Jadwal terlewat > 5 menit (' + Math.round(diffMs / 60000) + ' mnt). Eksekusi otomatis dibatalkan.';
           qData[r][stCol] = 'Failed - Missed Schedule';
           qData[r][errCol] = missedMsg;
           pSheet.appendRow(qData[r]);
           rowsToDelete.push(r + 1);
 
-          // Chain Abort: gagalkan seluruh utas sambungan pada grup ini dan arsipkan ke Published_Posts
           var abortMsg = 'Dibatalkan otomatis: Utas #' + seq + ' terlewat jadwal.';
           abortedGroupIds[rowGId] = abortMsg;
           archiveSubsequentChainsToPublished(qSheet, pSheet, qData, rowGId, seq, abortMsg, stCol, errCol, gIdCol, seqCol, rowsToDelete);
@@ -3901,6 +4170,10 @@ function getCloudinaryUsageStats() {
  * Menyatukan penarikan metrik (views, likes, reposts) dan komentar baru
  * Khusus untuk postingan yang aktif/diterbitkan dalam 48 jam terakhir.
  */
+function syncPostInsights() {
+  return syncPostAnalytics();
+}
+
 function syncPostAnalytics() {
   var lock = LockService.getScriptLock();
   var acquired = false;
@@ -3933,7 +4206,7 @@ function syncPostAnalytics() {
     var windowMs = 48 * 60 * 60 * 1000;
     var syncedCommentGroupIds = {};
 
-    for (var i = 0; i < publishedRows.length; i++) {
+    for (var i = publishedRows.length - 1; i >= 0; i--) {
       var pubThread = publishedRows[i];
       var status = String(pubThread.status || '').trim();
       var threadsPostId = String(pubThread.threads_post_id || '').trim();
@@ -3952,8 +4225,17 @@ function syncPostAnalytics() {
       }
 
       var token = '';
+      var threadAccId = String(pubThread.account_id || '').trim();
+      if (!threadAccId && pubThread.chain_group_id) {
+        for (var pr = 0; pr < publishedRows.length; pr++) {
+          if (String(publishedRows[pr].chain_group_id || publishedRows[pr].post_id) === String(pubThread.chain_group_id) && publishedRows[pr].account_id) {
+            threadAccId = String(publishedRows[pr].account_id).trim();
+            break;
+          }
+        }
+      }
       for (var a = 0; a < accounts.length; a++) {
-        if (String(accounts[a].account_id) === String(pubThread.account_id)) {
+        if (String(accounts[a].account_id) === threadAccId) {
           token = accounts[a].access_token;
           break;
         }
