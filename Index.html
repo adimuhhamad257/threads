@@ -582,6 +582,9 @@
                 <button @click="postStatusFilter = 'all'" :class="postStatusFilter === 'all' ? 'bg-brand-600 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
                   <span>Semua</span> (<span x-text="getPostStatusCount('all')"></span>)
                 </button>
+                <button @click="postStatusFilter = 'Processing'" :class="postStatusFilter === 'Processing' ? 'bg-purple-600 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
+                  <span>Processing</span> (<span x-text="getPostStatusCount('Processing')"></span>)
+                </button>
                 <button @click="postStatusFilter = 'Waiting Views'" :class="postStatusFilter === 'Waiting Views' ? 'bg-brand-600 text-white font-bold shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'" class="px-3 py-1.5 rounded-xl text-xs transition border">
                   <span>Waiting Views</span> (<span x-text="getPostStatusCount('Waiting Views')"></span>)
                 </button>
@@ -841,7 +844,13 @@
                           </div>
 
                           <div class="flex items-center space-x-1.5">
-                            <template x-if="!isRootChainPublished(post)">
+                            <template x-if="post.status === 'Processing' || getRootStatus(post) === 'Processing'">
+                              <span class="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200 flex items-center space-x-1">
+                                <span class="w-2 h-2 rounded-full bg-purple-500 animate-ping"></span>
+                                <span>Memproses...</span>
+                              </span>
+                            </template>
+                            <template x-if="!isRootChainPublished(post) && post.status !== 'Processing' && getRootStatus(post) !== 'Processing'">
                               <button @click="publishPostDirectly(post.post_id)" class="px-3 py-2 text-xs font-bold rounded-xl flex items-center space-x-1 transition" :class="post.status && post.status.indexOf('Failed') !== -1 ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'" :title="post.status && post.status.indexOf('Failed') !== -1 ? 'Coba Terbitkan Ulang' : 'Terbitkan Sekarang'">
                                 <i :data-lucide="post.status && post.status.indexOf('Failed') !== -1 ? 'rotate-ccw' : 'send'" class="w-3.5 h-3.5"></i>
                                 <span x-text="post.status && post.status.indexOf('Failed') !== -1 ? 'Coba Lagi' : 'Rilis'"></span>
@@ -996,8 +1005,13 @@
                               <i data-lucide="refresh-cw" class="w-4 h-4" :class="syncingPostIds.indexOf(post.post_id) !== -1 ? 'animate-spin' : ''"></i>
                             </button>
 
-                            <!-- Tombol Terbitkan Sekarang Hanya Jika Utas #1 Belum Terbit -->
-                            <template x-if="!isRootChainPublished(post)">
+                            <!-- Tombol Terbitkan Sekarang Hanya Jika Utas #1 Belum Terbit & Bukan Processing -->
+                            <template x-if="post.status === 'Processing' || getRootStatus(post) === 'Processing'">
+                              <span class="p-1.5 text-purple-600 inline-flex items-center" title="Sedang diproses ke Meta API">
+                                <span class="w-3.5 h-3.5 rounded-full border-2 border-purple-600 border-t-transparent animate-spin"></span>
+                              </span>
+                            </template>
+                            <template x-if="!isRootChainPublished(post) && post.status !== 'Processing' && getRootStatus(post) !== 'Processing'">
                               <button @click="publishPostDirectly(post.post_id)" class="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Terbitkan Sekarang">
                                 <i data-lucide="send" class="w-4 h-4"></i>
                               </button>
@@ -1024,8 +1038,8 @@
                               <i data-lucide="repeat" class="w-4 h-4"></i>
                             </button>
 
-                            <!-- Tombol Hapus Hanya Aktif Jika Utas #1 Belum Terbit -->
-                            <template x-if="!isRootChainPublished(post)">
+                            <!-- Tombol Hapus Hanya Aktif Jika Utas #1 Belum Terbit & Bukan Processing -->
+                            <template x-if="!isRootChainPublished(post) && post.status !== 'Processing' && getRootStatus(post) !== 'Processing'">
                               <button @click="promptDeletePost(post.post_id)" class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 rounded-lg" title="Hapus Postingan">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i>
                               </button>
@@ -5844,9 +5858,9 @@
 
         isPostLocked: function(post) {
           if (!post) return false;
-          if (post.status === 'Published') return true;
+          if (post.status === 'Published' || post.status === 'Processing') return true;
           var chains = this.getPostChains(post.post_id);
-          return chains.some(function(c) { return !!c.threads_post_id; });
+          return chains.some(function(c) { return !!c.threads_post_id || c.status === 'Processing'; });
         },
 
         getPostLatestActivityTime: function(post) {
@@ -5951,6 +5965,7 @@
             }
             var rootSt = self.getRootStatus(p);
             if (status === 'all') return rootSt !== 'Draft' && p.status !== 'Draft';
+            if (status === 'Processing') return rootSt === 'Processing' || p.status === 'Processing';
             if (status === 'Waiting Views') return self.isWaitingViewsPost(p);
             if (status === 'Published') return rootSt === 'Published' || p.status === 'Published';
             if (status === 'Failed') return (p.status || '').indexOf('Failed') !== -1 || (rootSt || '').indexOf('Failed') !== -1;
@@ -5976,6 +5991,8 @@
             var rootSt = self.getRootStatus(p);
             if (status === 'all') {
               matchStatus = (rootSt !== 'Draft' && p.status !== 'Draft');
+            } else if (status === 'Processing') {
+              matchStatus = (rootSt === 'Processing' || p.status === 'Processing');
             } else if (status === 'Waiting Views') {
               matchStatus = self.isWaitingViewsPost(p);
             } else if (status === 'Published') {
@@ -7817,7 +7834,7 @@
             case 'Published': return 'bg-emerald-100 text-emerald-800 border border-emerald-200';
             case 'Closed': return 'bg-slate-100 text-slate-700 border border-slate-300';
             case 'Target Not Reached': return 'bg-slate-200 text-slate-800';
-            case 'Processing': return 'bg-purple-100 text-purple-800';
+            case 'Processing': return 'bg-purple-100 text-purple-800 border border-purple-200 animate-pulse';
             default: return 'bg-slate-100 text-slate-700';
           }
         },

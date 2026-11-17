@@ -464,18 +464,26 @@ function resetStalledProcessingPosts(ss) {
       if (!sheet) continue;
       var values = sheet.getDataRange().getValues();
       if (values.length <= 1) continue;
+      var headers = values[0];
+      var stCol = headers.indexOf('status');
+      var errCol = headers.indexOf('error_log');
+      var schedCol = headers.indexOf('scheduled_at');
+      if (stCol === -1) stCol = 8;
+      if (errCol === -1) errCol = 18;
+      if (schedCol === -1) schedCol = 9;
+
       for (var r = values.length - 1; r >= 1; r--) {
-        var status = String(values[r][6] || '');
+        var status = String(values[r][stCol] || '');
         if (status === 'Processing') {
-          var dateVal = values[r][7] || values[r][11] || values[r][8];
+          var dateVal = values[r][schedCol];
           var timeMs = dateVal ? new Date(dateVal).getTime() : 0;
           if (!timeMs || (now - timeMs > timeoutMs)) {
-            sheet.getRange(r + 1, 7).setValue('Failed');
-            sheet.getRange(r + 1, 11).setValue('Watchdog: Status Processing terhenti >15 menit. Otomatis ditandai Failed.');
+            sheet.getRange(r + 1, stCol + 1).setValue('Failed');
+            sheet.getRange(r + 1, errCol + 1).setValue('Watchdog: Status Processing terhenti >15 menit. Otomatis ditandai Failed.');
             if (sheet.getName() === 'Queue_Posts') {
               var failRow = sheet.getRange(r + 1, 1, 1, sheet.getLastColumn()).getValues()[0];
-              failRow[6] = 'Failed';
-              failRow[10] = 'Watchdog: Status Processing terhenti >15 menit. Otomatis ditandai Failed.';
+              failRow[stCol] = 'Failed';
+              failRow[errCol] = 'Watchdog: Status Processing terhenti >15 menit. Otomatis ditandai Failed.';
               var pSheet = ss.getSheetByName('Published_Posts');
               if (!pSheet) pSheet = ss.insertSheet('Published_Posts');
               pSheet.appendRow(failRow);
@@ -3820,6 +3828,11 @@ function processPublishingQueue() {
 
       // 3. Eksekusi Pengiriman ke Meta Threads API
       if (shouldPublish) {
+        // Pre-Flight Locking: Tandai status Processing di Sheets & memori lalu flush seketika
+        qSheet.getRange(r + 1, stCol + 1).setValue('Processing');
+        qData[r][stCol] = 'Processing';
+        SpreadsheetApp.flush();
+
         var account = null;
         for (var ac = 0; ac < accounts.length; ac++) {
           if (String(accounts[ac].account_id) === accId) {
