@@ -3235,7 +3235,7 @@ function archiveSingleThreadFromQueue(ss, postId, status, errorMsg) {
  */
 function executeSingleMetaThreadPublish(threadObj, account, parentMetaId, mediaRows) {
   try {
-    // Parser: Ekstrak raw media_ids menjadi array of strings murni (hanya ID media) SEBELUM diproses
+    // 1. Ekstrak hanya nilai ID media atau URL langsung dari data mentah
     var rawMedia = threadObj.media_ids;
     if (typeof rawMedia === 'string' && rawMedia.trim()) {
       try {
@@ -3248,49 +3248,88 @@ function executeSingleMetaThreadPublish(threadObj, account, parentMetaId, mediaR
       rawMedia = rawMedia ? [rawMedia] : [];
     }
 
-    var mediaList = [];
+    var extractedIdsOrUrls = [];
     for (var mi = 0; mi < rawMedia.length; mi++) {
-      var mItem = rawMedia[mi];
-      if (!mItem) continue;
-      if (typeof mItem === 'object' && mItem !== null) {
-        var extId = mItem.media_id ? String(mItem.media_id).trim() : (mItem.url || mItem.cloudinary_url || '');
-        if (extId) mediaList.push(extId);
-      } else if (typeof mItem === 'string') {
-        var strId = mItem.trim();
-        if (strId) mediaList.push(strId);
+      var item = rawMedia[mi];
+      if (!item) continue;
+      if (typeof item === 'object' && item !== null) {
+        if (item.media_id && String(item.media_id).trim()) {
+          extractedIdsOrUrls.push(String(item.media_id).trim());
+        } else if (item.url && /^https?:\/\//i.test(String(item.url).trim())) {
+          extractedIdsOrUrls.push(String(item.url).trim());
+        } else if (item.cloudinary_url && /^https?:\/\//i.test(String(item.cloudinary_url).trim())) {
+          extractedIdsOrUrls.push(String(item.cloudinary_url).trim());
+        }
+      } else if (typeof item === 'string') {
+        var strVal = item.trim();
+        if (strVal) extractedIdsOrUrls.push(strVal);
       }
     }
 
-    if (!mediaRows || mediaRows.length <= 1) {
-      try {
-        var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-        var mSheet = ss.getSheetByName('Media_Files');
-        if (mSheet) mediaRows = mSheet.getDataRange().getValues();
-      } catch (eRows) {}
+    // 2. Integritas Data Mutlak: Ambil data Media_Files langsung dari database
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var mSheet = ss.getSheetByName('Media_Files');
+    var mData = mSheet ? mSheet.getDataRange().getValues() : [];
+    var mHeaders = mData.length > 0 ? mData[0] : [];
+
+    var idCol = mHeaders.indexOf('media_id');
+    var typeCol = mHeaders.indexOf('media_type');
+    var urlCol = mHeaders.indexOf('cloudinary_url');
+    if (idCol === -1) idCol = 0;
+    if (typeCol === -1) typeCol = 4;
+    if (urlCol === -1) urlCol = 5;
+
+    // Build lookup map dari database: media_id -> { cloudinary_url, media_type }
+    var dbMediaMap = {};
+    for (var r = 1; r < mData.length; r++) {
+      var rowId = String(mData[r][idCol] || '').trim();
+      var rowUrl = String(mData[r][urlCol] || '').trim();
+      var rowType = String(mData[r][typeCol] || 'IMAGE').trim().toUpperCase();
+      if (rowId && /^https?:\/\//i.test(rowUrl)) {
+        dbMediaMap[rowId] = {
+          media_id: rowId,
+          cloudinary_url: rowUrl,
+          media_type: rowType === 'VIDEO' ? 'VIDEO' : 'IMAGE'
+        };
+      }
+    }
+
+    // 3. Resolusikan media: Hanya gunakan URL valid asli dari database
+    var validMediaList = [];
+    for (var k = 0; k < extractedIdsOrUrls.length; k++) {
+      var cand = extractedIdsOrUrls[k];
+      if (dbMediaMap[cand]) {
+        validMediaList.push(dbMediaMap[cand]);
+      } else if (/^https?:\/\//i.test(cand)) {
+        var isVid = /\.(mp4|mov|webm)$/i.test(cand) || cand.indexOf('/video/') !== -1;
+        validMediaList.push({
+          media_id: '',
+          cloudinary_url: cand,
+          media_type: isVid ? 'VIDEO' : 'IMAGE'
+        });
+      }
     }
 
     var publishedPostId = '';
     var textContent = String(threadObj.content_text || '').trim();
     var cleanParentId = parentMetaId ? String(parentMetaId).trim() : '';
 
-    if (mediaList.length > 1) {
+    if (validMediaList.length > 1) {
       // Karusel: reply_to_id HANYA dipasang di carouselPayload (Parent), DILARANG di cPayload (Child)
       var childContainerIds = [];
-      for (var m = 0; m < mediaList.length; m++) {
-        var mObj = findMediaById(mediaList[m], mediaRows);
-        if (mObj) {
-          var isVid = (mObj.media_type === 'VIDEO');
-          var cPayload = {
-            media_type: isVid ? 'VIDEO' : 'IMAGE',
-            is_carousel_item: 'true'
-          };
-          if (isVid) cPayload.video_url = mObj.cloudinary_url;
-          else cPayload.image_url = mObj.cloudinary_url;
+      for (var m = 0; m < validMediaList.length; m++) {
+        var mObj = validMediaList[m];
+        var isVid = (mObj.media_type === 'VIDEO');
+        var cPayload = {
+          media_type: isVid ? 'VIDEO' : 'IMAGE',
+          is_carousel_item: 'true'
+        };
+        if (isVid) cPayload.video_url = mObj.cloudinary_url;
+        else cPayload.image_url = mObj.cloudinary_url;
 
-          var childId = createMetaContainer(account.meta_user_id, account.access_token, cPayload);
-          checkMetaContainerStatus(childId, account.access_token, 15);
-          childContainerIds.push(childId);
-        }
+        var childId = createMetaContainer(account.meta_user_id, account.access_token, cPayload);
+        checkMetaContainerStatus(childId, account.access_token, 15);
+        childContainerIds.push(childId);
       }
 
       if (childContainerIds.length < 2) {
@@ -3310,15 +3349,15 @@ function executeSingleMetaThreadPublish(threadObj, account, parentMetaId, mediaR
       checkMetaContainerStatus(parentContainerId, account.access_token, 15);
       publishedPostId = publishMetaContainer(account.meta_user_id, parentContainerId, account.access_token, false);
 
-    } else if (mediaList.length === 1) {
+    } else if (validMediaList.length === 1) {
       // Single Image / Video: HANYA sPayload.reply_to_id jika ada parentMetaId
-      var singleMedia = findMediaById(mediaList[0], mediaRows);
-      var isSingleVid = (singleMedia && singleMedia.media_type === 'VIDEO');
+      var singleMedia = validMediaList[0];
+      var isSingleVid = (singleMedia.media_type === 'VIDEO');
       var sPayload = {
         media_type: isSingleVid ? 'VIDEO' : 'IMAGE'
       };
       if (isSingleVid) sPayload.video_url = singleMedia.cloudinary_url;
-      else if (singleMedia) sPayload.image_url = singleMedia.cloudinary_url;
+      else sPayload.image_url = singleMedia.cloudinary_url;
 
       if (textContent) sPayload.text = textContent;
       if (cleanParentId) {
@@ -3621,7 +3660,7 @@ function processPublishingQueue() {
         }
       }
 
-      // THROTTLING & JALUR VIP: Batas Kuota Harian & Multi-Jendela Waktu HANYA berlaku untuk Utas #1 (seq === 1).
+      // THROTTLING & JALUR VIP: Batas Kuota Harian HANYA berlaku untuk Utas #1 (seq === 1).
       // Utas sambungan (#2+) mendapat JALUR VIP: langsung diterbitkan saat syarat rilis tercapai!
       if (seq === 1 && account) {
         var dailyMax = Number(account.daily_max_posts) || 30;
@@ -3632,9 +3671,20 @@ function processPublishingQueue() {
           continue;
         }
 
-        var inWindow = isCurrentTimeInWindows(account.posting_windows, 'Asia/Jakarta');
-        if (!inWindow) {
-          continue;
+        // BYPASS JENDELA WAKTU: Pos dengan jadwal eksplisit yang sudah tiba waktunya langsung dieksekusi tanpa tertahan jendela
+        var isSchedArrived = false;
+        if (schedAtStr) {
+          var sDate = new Date(schedAtStr);
+          if (!isNaN(sDate.getTime()) && nowMs >= sDate.getTime()) {
+            isSchedArrived = true;
+          }
+        }
+
+        if (!isSchedArrived) {
+          var inWindow = isCurrentTimeInWindows(account.posting_windows, 'Asia/Jakarta');
+          if (!inWindow) {
+            continue;
+          }
         }
       }
 
@@ -3908,45 +3958,49 @@ function publishContainer(metaUserId, creationId, token) {
 function createMediaSnapshot(rawMediaList, mediaRows) {
   if (!Array.isArray(rawMediaList)) return [];
   var snapshots = [];
+  var idCol = 0, typeCol = 4, urlCol = 5;
+  if (mediaRows && mediaRows.length > 0) {
+    var h = mediaRows[0];
+    if (h.indexOf('media_id') !== -1) idCol = h.indexOf('media_id');
+    if (h.indexOf('media_type') !== -1) typeCol = h.indexOf('media_type');
+    if (h.indexOf('cloudinary_url') !== -1) urlCol = h.indexOf('cloudinary_url');
+  }
+
   for (var i = 0; i < rawMediaList.length; i++) {
     var item = rawMediaList[i];
     if (!item) continue;
-    if (typeof item === 'object' && item !== null && (item.url || item.cloudinary_url)) {
-      snapshots.push({
-        media_id: item.media_id || '',
-        url: item.url || item.cloudinary_url,
-        type: item.type || item.media_type || 'IMAGE'
-      });
-      continue;
+    var extId = '';
+    var extUrl = '';
+    var extType = 'IMAGE';
+
+    if (typeof item === 'object' && item !== null) {
+      extId = item.media_id ? String(item.media_id).trim() : '';
+      var candUrl = String(item.url || item.cloudinary_url || '').trim();
+      if (/^https?:\/\//i.test(candUrl)) extUrl = candUrl;
+      extType = (item.type || item.media_type || 'IMAGE').toUpperCase();
+    } else if (typeof item === 'string') {
+      var s = item.trim();
+      if (/^https?:\/\//i.test(s)) extUrl = s;
+      else extId = s;
     }
-    if (typeof item === 'string') {
-      if (item.indexOf('http://') === 0 || item.indexOf('https://') === 0) {
-        var isVid = /\.(mp4|mov|webm)$/i.test(item);
-        snapshots.push({
-          media_id: '',
-          url: item,
-          type: isVid ? 'VIDEO' : 'IMAGE'
-        });
-        continue;
-      }
-      var found = null;
-      if (mediaRows) {
-        for (var m = 1; m < mediaRows.length; m++) {
-          if (String(mediaRows[m][0]) === String(item)) {
-            found = {
-              media_id: String(mediaRows[m][0]),
-              url: String(mediaRows[m][4] || ''),
-              type: String(mediaRows[m][3] || 'IMAGE')
-            };
-            break;
-          }
+
+    if (extId && mediaRows && mediaRows.length > 1) {
+      for (var m = 1; m < mediaRows.length; m++) {
+        if (String(mediaRows[m][idCol]).trim() === extId) {
+          extUrl = String(mediaRows[m][urlCol] || '').trim();
+          extType = String(mediaRows[m][typeCol] || 'IMAGE').toUpperCase();
+          break;
         }
       }
-      if (found) {
-        snapshots.push(found);
-      } else {
-        snapshots.push({ media_id: item, url: '', type: 'IMAGE' });
-      }
+    }
+
+    if (extUrl) {
+      var isVid = extType === 'VIDEO' || /\.(mp4|mov|webm)$/i.test(extUrl);
+      snapshots.push({
+        media_id: extId,
+        url: extUrl,
+        type: isVid ? 'VIDEO' : 'IMAGE'
+      });
     }
   }
   return snapshots;
@@ -3957,8 +4011,7 @@ function findMediaById(mediaId, mediaRows) {
   var idStr = typeof mediaId === 'object' && mediaId !== null ? (mediaId.media_id || mediaId.url || mediaId.cloudinary_url || '') : String(mediaId).trim();
   if (!idStr) return null;
 
-  // Jika berupa URL langsung (Cloudinary CDN URL)
-  if (idStr.indexOf('http://') === 0 || idStr.indexOf('https://') === 0) {
+  if (/^https?:\/\//i.test(idStr)) {
     var isVideo = /\.(mp4|mov|webm)$/i.test(idStr) || (idStr.indexOf('/video/') !== -1);
     return {
       media_type: isVideo ? 'VIDEO' : 'IMAGE',
@@ -3966,14 +4019,23 @@ function findMediaById(mediaId, mediaRows) {
     };
   }
 
-  // Cari berdasarkan ID file di mediaRows
-  if (mediaRows) {
+  if (mediaRows && mediaRows.length > 1) {
+    var headers = mediaRows[0];
+    var idCol = headers.indexOf('media_id');
+    var typeCol = headers.indexOf('media_type');
+    var urlCol = headers.indexOf('cloudinary_url');
+    if (idCol === -1) idCol = 0;
+    if (typeCol === -1) typeCol = 4;
+    if (urlCol === -1) urlCol = 5;
+
     for (var i = 1; i < mediaRows.length; i++) {
-      if (String(mediaRows[i][0]).trim() === idStr) {
-        var isVid = String(mediaRows[i][3] || '').toUpperCase() === 'VIDEO' || /\.(mp4|mov|webm)$/i.test(mediaRows[i][4] || '');
+      if (String(mediaRows[i][idCol]).trim() === idStr) {
+        var rawUrl = String(mediaRows[i][urlCol] || '').trim();
+        var rawType = String(mediaRows[i][typeCol] || '').toUpperCase();
+        var isVid = rawType === 'VIDEO' || /\.(mp4|mov|webm)$/i.test(rawUrl);
         return {
           media_type: isVid ? 'VIDEO' : 'IMAGE',
-          cloudinary_url: mediaRows[i][4]
+          cloudinary_url: rawUrl
         };
       }
     }
