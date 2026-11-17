@@ -3197,6 +3197,10 @@
                 <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
                 <span>3. Umum</span>
               </button>
+              <button @click="settingsSubTab = 'api_keys'" :class="settingsSubTab === 'api_keys' ? 'bg-brand-600 text-white font-bold' : 'bg-surface text-slate-600 hover:bg-slate-100'" class="px-4 py-2 rounded-xl text-xs transition border border-slate-200 flex items-center space-x-1.5">
+                <i data-lucide="key" class="w-3.5 h-3.5"></i>
+                <span>4. API Keys & Webhooks</span>
+              </button>
             </div>
 
             <!-- SUB-TAB 1: OTOMASI & TRIGGERS (MODULAR 2-MODE CRON SYSTEM) -->
@@ -3406,6 +3410,139 @@
               </div>
             </div>
 
+            <!-- SUB-TAB 4: API KEYS & WEBHOOKS (UNIVERSAL REST API GATEWAY) -->
+            <div x-show="settingsSubTab === 'api_keys'" class="space-y-5">
+              <!-- Card 1: Web App Base URL -->
+              <div class="bg-surface rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+                <div class="flex items-center space-x-3 pb-3 border-b border-slate-100">
+                  <div class="p-2.5 bg-brand-50 text-brand-600 rounded-xl"><i data-lucide="globe" class="w-5 h-5"></i></div>
+                  <div>
+                    <h3 class="text-sm font-bold text-slate-900">URL Endpoint Universal API Gateway</h3>
+                    <p class="text-xs text-slate-500">Gunakan URL hasil deployment Web App ini sebagai base endpoint untuk integrasi AI (Hermes / N8N)</p>
+                  </div>
+                </div>
+
+                <div class="space-y-2">
+                  <label class="block text-xs font-semibold text-slate-700">URL Base Web App (Deploy Exec URL)</label>
+                  <div class="flex flex-col sm:flex-row gap-2">
+                    <input type="text" x-model="baseUrl" placeholder="https://script.google.com/macros/s/.../exec" class="flex-1 text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 font-mono text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20">
+                    <button type="button" @click="saveWebAppUrl()" :disabled="savingBaseUrl" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs shrink-0 disabled:opacity-50">
+                      <i data-lucide="save" class="w-3.5 h-3.5"></i>
+                      <span x-text="savingBaseUrl ? 'Menyimpan...' : 'Simpan URL'"></span>
+                    </button>
+                    <button type="button" @click="copyToClipboard(baseUrl, 'URL Base Web App disalin!')" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shrink-0">
+                      <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                      <span>Salin URL</span>
+                    </button>
+                  </div>
+                  <p class="text-[11px] text-slate-400">Endpoint ini menerima request GET dan POST langsung dari agen AI Anda dengan otentikasi API Key terenkripsi.</p>
+                </div>
+              </div>
+
+              <!-- Card 2: Dynamic API Key Management -->
+              <div class="bg-surface rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-3">
+                  <div class="flex items-center space-x-3">
+                    <div class="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><i data-lucide="shield-check" class="w-5 h-5"></i></div>
+                    <div>
+                      <h3 class="text-sm font-bold text-slate-900">Manajemen Kunci Akses (Dynamic API Keys)</h3>
+                      <p class="text-xs text-slate-500">Kunci akses SaaS berkinerja tinggi dengan cache 6 jam untuk integrasi aman</p>
+                    </div>
+                  </div>
+                  <button type="button" @click="openApiKeyModal()" class="px-4 py-2 bg-gradient-to-r from-brand-600 to-indigo-600 hover:opacity-95 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm shrink-0">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>+ Generate API Key Baru</span>
+                  </button>
+                </div>
+
+                <!-- Tabel API Keys -->
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr class="bg-slate-50/75 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-semibold">
+                        <th class="py-3 px-3">Nama Kunci</th>
+                        <th class="py-3 px-3">API Key Token</th>
+                        <th class="py-3 px-3">Status</th>
+                        <th class="py-3 px-3">Dibuat Pada</th>
+                        <th class="py-3 px-3">Terakhir Digunakan</th>
+                        <th class="py-3 px-3 text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                      <template x-for="k in apiKeys" :key="k.key_id">
+                        <tr class="hover:bg-slate-50/50 transition">
+                          <td class="py-3 px-3 font-bold text-slate-900" x-text="k.key_name"></td>
+                          <td class="py-3 px-3 font-mono">
+                            <div class="flex items-center space-x-2">
+                              <span class="text-slate-600" x-text="maskApiKey(k.api_key)"></span>
+                              <button type="button" @click="copyToClipboard(k.api_key, 'API Key ' + k.key_name + ' disalin!')" class="p-1 text-slate-400 hover:text-brand-600 rounded transition" title="Salin Full API Key">
+                                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                              </button>
+                            </div>
+                          </td>
+                          <td class="py-3 px-3">
+                            <span :class="k.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold border inline-flex items-center space-x-1">
+                              <span class="w-1.5 h-1.5 rounded-full" :class="k.status === 'Active' ? 'bg-emerald-500' : 'bg-rose-500'"></span>
+                              <span x-text="k.status"></span>
+                            </span>
+                          </td>
+                          <td class="py-3 px-3 text-slate-500" x-text="formatDate(k.created_at)"></td>
+                          <td class="py-3 px-3 text-slate-500" x-text="k.last_used_at ? formatDate(k.last_used_at) : 'Belum pernah'"></td>
+                          <td class="py-3 px-3 text-right">
+                            <template x-if="k.status === 'Active'">
+                              <button type="button" @click="promptRevokeKey(k.key_id, k.key_name)" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-xs font-semibold transition">
+                                Cabut Kunci
+                              </button>
+                            </template>
+                            <template x-if="k.status !== 'Active'">
+                              <span class="text-[11px] text-slate-400 italic">Dinonaktifkan</span>
+                            </template>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+
+                <template x-if="apiKeys.length === 0">
+                  <div class="py-8 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border border-slate-200">
+                    Belum ada API Key dibuat. Klik tombol "+ Generate API Key Baru" untuk memberikan akses ke Agen AI.
+                  </div>
+                </template>
+              </div>
+
+              <!-- Card 3: Dokumentasi Cepat API untuk AI Agent (Hermes / N8N) -->
+              <div class="bg-surface rounded-2xl border border-slate-200 p-6 shadow-sm space-y-3">
+                <div class="flex items-center space-x-2 text-slate-900 font-bold text-sm">
+                  <i data-lucide="terminal" class="w-4 h-4 text-brand-600"></i>
+                  <span>Panduan Parameter Universal API Gateway</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+                    <span class="font-bold text-slate-800 block">1. GET: Tarik Data Universal</span>
+                    <code class="block bg-white p-2 rounded-lg border border-slate-200 text-[11px] text-slate-700 font-mono overflow-x-auto">
+                      ?api_key=KEY&action=read_table&table_name=Draft_Acc
+                    </code>
+                    <span class="font-bold text-slate-800 block pt-1">2. GET: Alokasi Slot Harian</span>
+                    <code class="block bg-white p-2 rounded-lg border border-slate-200 text-[11px] text-slate-700 font-mono overflow-x-auto">
+                      ?api_key=KEY&action=get_daily_targets
+                    </code>
+                  </div>
+
+                  <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+                    <span class="font-bold text-slate-800 block">3. POST: Create, Update, Delete Baris</span>
+                    <code class="block bg-white p-2 rounded-lg border border-slate-200 text-[11px] text-slate-700 font-mono overflow-x-auto">
+                      {"action":"create_row","table_name":"Draft_Acc","data":{...}}
+                    </code>
+                    <span class="font-bold text-slate-800 block pt-1">4. POST: Otomasi Penjadwalan Ulang Gagal</span>
+                    <code class="block bg-white p-2 rounded-lg border border-slate-200 text-[11px] text-slate-700 font-mono overflow-x-auto">
+                      {"action":"reschedule_failed"}
+                    </code>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- SUB-TAB 4: UMUM -->
             <div x-show="settingsSubTab === 'general'" class="space-y-5">
               <div class="bg-surface rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
@@ -3490,6 +3627,40 @@
         </button>
       </nav>
     </main>
+
+    <!-- MODAL: GENERATE DYNAMIC API KEY BARU -->
+    <div x-cloak x-show="apiKeyModal.show" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+      <div class="bg-surface rounded-2xl p-6 max-w-md w-full mx-auto shadow-2xl border border-slate-100 space-y-4">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <i data-lucide="key" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-slate-900">Generate Dynamic API Key Baru</h3>
+              <p class="text-[11px] text-slate-500">Berikan akses aman ke Agen AI eksternal</p>
+            </div>
+          </div>
+          <button @click="apiKeyModal.show = false" class="text-slate-400 hover:text-slate-600 p-1">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Nama Kunci / Label Agen <span class="text-rose-500 font-bold">*</span></label>
+          <input type="text" x-model="apiKeyModal.name" placeholder="Contoh: Hermes Agent AI - Server 1" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20">
+          <p class="text-[10px] text-slate-400 mt-1">Kunci akan dibuat dengan prefix aman <code>tc_live_</code> dan masa simpan cache 6 jam.</p>
+        </div>
+
+        <div class="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100">
+          <button @click="apiKeyModal.show = false" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">Batal</button>
+          <button @click="submitGenerateApiKey()" :disabled="apiKeyModal.loading || !apiKeyModal.name.trim()" class="px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm disabled:opacity-40">
+            <template x-if="apiKeyModal.loading"><div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div></template>
+            <span>Buat Kunci Sekarang</span>
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- MODAL: ADD / EDIT ACCOUNT WITH NICHE & PERSONA -->
     <div x-cloak x-show="accountModal.show" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
@@ -5118,6 +5289,10 @@
         toast: { show: false, message: '', type: 'success' },
         confirmModal: { show: false, title: '', message: '', onConfirm: () => {} },
         accountModal: { show: false, isEdit: false, accountId: '', token: '', category: 'General', account_persona: '', posting_windows: [{ start: '08:00', end: '22:00' }], daily_max_posts: 30, loading: false },
+        apiKeys: [],
+        baseUrl: '',
+        savingBaseUrl: false,
+        apiKeyModal: { show: false, name: '', loading: false },
         productModal: { show: false, isEdit: false, data: { product_id: '', title: '', category: '', price: 0, description: '', affiliate_link: '', dashboard_url: '', commission_pct: 0, shopee_commission_pct: 0, cover_url: '', assigned_account_ids: [] }, loading: false },
         productMediaModal: { show: false, product: null, selectedFiles: [], uploading: false, uploadPercent: 0, progressText: '', showUploadForm: false },
         mediaPickerModal: { show: false, targetChainIndex: 0, selectedMediaIds: [], openBatchIds: [] },
@@ -5443,6 +5618,8 @@
                 self.postAnalytics = d.postAnalytics || [];
                 self.postComments = d.postComments || [];
                 self.draftAcc = d.draftAcc || [];
+                self.apiKeys = d.apiKeys || [];
+                self.baseUrl = d.baseUrl || d.settings.web_app_base_url || '';
                 self.settings = d.settings || {};
               } else {
                 self.showToast(res ? res.message : 'Gagal memuat data', 'error');
@@ -9140,6 +9317,126 @@
               self.showToast('Error trigger: ' + err.message, 'error');
             })
             .updateTriggerConfig(triggerType, state.interval, enable);
+        },
+
+        // --- API KEY & WEBHOOK METHODS ---
+        openApiKeyModal: function() {
+          this.apiKeyModal.name = '';
+          this.apiKeyModal.loading = false;
+          this.apiKeyModal.show = true;
+          this.$nextTick(function() { lucide.createIcons(); });
+        },
+
+        maskApiKey: function(key) {
+          if (!key) return '-';
+          var s = String(key);
+          if (s.length <= 12) return s;
+          return s.slice(0, 10) + '••••••••' + s.slice(-4);
+        },
+
+        copyToClipboard: function(text, successMsg) {
+          if (!text) {
+            this.showToast('Teks kosong untuk disalin', 'error');
+            return;
+          }
+          var self = this;
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function() {
+              self.showToast(successMsg || 'Berhasil disalin ke clipboard!');
+            }).catch(function() {
+              self.fallbackCopyText(text, successMsg);
+            });
+          } else {
+            this.fallbackCopyText(text, successMsg);
+          }
+        },
+
+        fallbackCopyText: function(text, successMsg) {
+          var textArea = document.createElement('textarea');
+          textArea.value = text;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-999999px';
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          try {
+            document.execCommand('copy');
+            this.showToast(successMsg || 'Berhasil disalin ke clipboard!');
+          } catch (err) {
+            this.showToast('Gagal menyalin teks', 'error');
+          }
+          document.body.removeChild(textArea);
+        },
+
+        saveWebAppUrl: function() {
+          var url = (this.baseUrl || '').trim();
+          if (!url) {
+            this.showToast('URL Base Web App tidak boleh kosong', 'error');
+            return;
+          }
+          this.savingBaseUrl = true;
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function(res) {
+              self.savingBaseUrl = false;
+              if (res && res.ok) {
+                self.showToast('URL Base Web App berhasil disimpan!');
+              } else {
+                self.showToast(res ? res.message : 'Gagal menyimpan URL', 'error');
+              }
+            })
+            .withFailureHandler(function(err) {
+              self.savingBaseUrl = false;
+              self.showToast('Error: ' + err.message, 'error');
+            })
+            .saveBaseUrl(url);
+        },
+
+        submitGenerateApiKey: function() {
+          var name = (this.apiKeyModal.name || '').trim();
+          if (!name) {
+            this.showToast('Nama kunci / label agen wajib diisi', 'error');
+            return;
+          }
+          this.apiKeyModal.loading = true;
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function(res) {
+              self.apiKeyModal.loading = false;
+              if (res && res.ok) {
+                self.showToast(res.message);
+                self.apiKeyModal.show = false;
+                self.refreshAllData();
+              } else {
+                self.showToast(res ? res.message : 'Gagal membuat API key', 'error');
+              }
+            })
+            .withFailureHandler(function(err) {
+              self.apiKeyModal.loading = false;
+              self.showToast('Error: ' + err.message, 'error');
+            })
+            .generateApiKey(name);
+        },
+
+        promptRevokeKey: function(keyId, keyName) {
+          var self = this;
+          this.confirmModal = {
+            show: true,
+            title: 'Cabut Akses Kunci?',
+            message: 'API Key "' + keyName + '" akan dinonaktifkan secara permanen. Agen AI yang menggunakan kunci ini akan ditolak.',
+            onConfirm: function() {
+              google.script.run
+                .withSuccessHandler(function(res) {
+                  if (res && res.ok) {
+                    self.showToast(res.message);
+                    self.refreshAllData();
+                  } else {
+                    self.showToast(res ? res.message : 'Gagal mencabut kunci', 'error');
+                  }
+                })
+                .revokeApiKey(keyId);
+            }
+          };
         },
 
         // --- DIAGNOSTIK & HEALTH CHECKS ---

@@ -6,10 +6,17 @@
 const SPREADSHEET_ID = '1fbG5lrBAAIfYG0np1P7kqSpOclsm9WN1G4E1wBiJ1Uw';
 
 function doGet(e) {
+  if (e && e.parameter && (e.parameter.api_key || e.parameter.action)) {
+    return handleApiGatewayGet(e);
+  }
   return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('ThreadChain Manager - Meta Threads Automation')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function doPost(e) {
+  return handleApiGatewayPost(e);
 }
 
 /**
@@ -197,6 +204,10 @@ function setupDatabase() {
     {
       name: 'Draft_Acc',
       headers: ['draft_id', 'account_id', 'title', 'product_id', 'viral_id', 'chains_json', 'approval_status', 'revision_notes', 'created_at', 'updated_at']
+    },
+    {
+      name: 'API_Keys',
+      headers: ['key_id', 'key_name', 'api_key', 'status', 'created_at', 'last_used_at']
     }
   ];
 
@@ -648,6 +659,18 @@ function getInitialData() {
       return new Date(b.created_at || 0) - new Date(a.created_at || 0);
     });
 
+    var apiKeys = readSheetAsJson('API_Keys');
+    apiKeys.sort(function(a, b) {
+      return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    });
+
+    var appBaseUrl = settingsMap['web_app_base_url'] || '';
+    if (!appBaseUrl) {
+      try {
+        appBaseUrl = ScriptApp.getService().getUrl() || '';
+      } catch (errUrl) {}
+    }
+
     var payload = {
       accounts: accounts,
       products: products,
@@ -661,6 +684,8 @@ function getInitialData() {
       postAnalytics: readSheetAsJson('Post_Analytics'),
       postComments: readSheetAsJson('Post_Comments'),
       draftAcc: draftAcc,
+      apiKeys: apiKeys,
+      baseUrl: appBaseUrl,
       settings: settingsMap
     };
 
@@ -1871,6 +1896,491 @@ function clonePostToAccount(sourcePostId, targetAccountId, rewriteWithAi) {
     return savePostWithChains(newPostData, newChains);
   } catch (err) {
     return { ok: false, message: err.message };
+  }
+}
+
+/**
+ * Dynamic API Key & Web App Base URL Management
+ */
+function generateApiKey(keyName) {
+  try {
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('API_Keys');
+    if (!sheet) {
+      setupDatabase();
+      sheet = ss.getSheetByName('API_Keys');
+    }
+
+    var keyId = 'key_' + Utilities.getUuid().slice(0, 8);
+    var randomBytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Date.now().toString());
+    var hexToken = randomBytes.map(function(byte) {
+      var v = (byte < 0 ? byte + 256 : byte).toString(16);
+      return v.length === 1 ? '0' + v : v;
+    }).join('').slice(0, 32);
+
+    var apiKey = 'tc_live_' + hexToken;
+    var nowIso = new Date().toISOString();
+    var cleanName = (keyName || 'Default AI Key').trim();
+
+    var rowObj = {
+      key_id: keyId,
+      key_name: cleanName,
+      api_key: apiKey,
+      status: 'Active',
+      created_at: nowIso,
+      last_used_at: ''
+    };
+
+    appendRowData('API_Keys', rowObj);
+
+    var cache = CacheService.getScriptCache();
+    cache.put('apk_' + apiKey, 'Active', 21600);
+
+    return {
+      ok: true,
+      message: 'API Key berhasil dibuat!',
+      data: serializeForClient(rowObj)
+    };
+  } catch (err) {
+    return { ok: false, message: 'Gagal membuat API key: ' + err.message };
+  }
+}
+
+function revokeApiKey(keyId) {
+  try {
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('API_Keys');
+    if (!sheet) return { ok: false, message: 'Tabel API_Keys tidak ditemukan' };
+
+    var values = sheet.getDataRange().getValues();
+    if (values.length <= 1) return { ok: false, message: 'Data kunci kosong' };
+
+    var headers = values[0];
+    var idCol = headers.indexOf('key_id');
+    var keyCol = headers.indexOf('api_key');
+    var stCol = headers.indexOf('status');
+    if (idCol === -1) idCol = 0;
+    if (keyCol === -1) keyCol = 2;
+    if (stCol === -1) stCol = 3;
+
+    for (var i = 1; i < values.length; i++) {
+      if (String(values[i][idCol]) === String(keyId)) {
+        sheet.getRange(i + 1, stCol + 1).setValue('Revoked');
+        var revokedToken = String(values[i][keyCol]).trim();
+        if (revokedToken) {
+          CacheService.getScriptCache().remove('apk_' + revokedToken);
+        }
+        return { ok: true, message: 'API Key berhasil dinonaktifkan (Revoked).' };
+      }
+    }
+    return { ok: false, message: 'Kunci tidak ditemukan' };
+  } catch (err) {
+    return { ok: false, message: 'Gagal mencabut kunci: ' + err.message };
+  }
+}
+
+function saveBaseUrl(url) {
+  return saveSettings({ web_app_base_url: (url || '').trim() });
+}
+
+function getBaseUrl() {
+  try {
+    var settingsRows = readSheetAsJson('Settings');
+    for (var i = 0; i < settingsRows.length; i++) {
+      if (settingsRows[i].setting_key === 'web_app_base_url' && settingsRows[i].setting_value) {
+        return settingsRows[i].setting_value;
+      }
+    }
+    return ScriptApp.getService().getUrl() || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+/**
+ * Universal JSON Output Response Builder for API Gateway
+ */
+function createJsonResponse(dataObj, statusCode) {
+  var output = ContentService.createTextOutput(JSON.stringify(serializeForClient(dataObj)));
+  output.setMimeType(ContentService.MimeType.JSON);
+  return output;
+}
+
+/**
+ * Fast API Key Authentication via CacheService
+ */
+function authenticateApiKey(apiKey) {
+  if (!apiKey) return false;
+  var token = String(apiKey).trim();
+  if (!token) return false;
+
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get('apk_' + token);
+  if (cached === 'Active') {
+    return true;
+  }
+  if (cached === 'Revoked') {
+    return false;
+  }
+
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = ss.getSheetByName('API_Keys');
+  if (!sheet) {
+    setupDatabase();
+    sheet = ss.getSheetByName('API_Keys');
+  }
+
+  var values = sheet.getDataRange().getValues();
+  if (values.length <= 1) return false;
+
+  var headers = values[0];
+  var keyCol = headers.indexOf('api_key');
+  var stCol = headers.indexOf('status');
+  var usedCol = headers.indexOf('last_used_at');
+  if (keyCol === -1) keyCol = 2;
+  if (stCol === -1) stCol = 3;
+  if (usedCol === -1) usedCol = 5;
+
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][keyCol]).trim() === token) {
+      var status = String(values[i][stCol] || '').trim();
+      if (status === 'Active') {
+        cache.put('apk_' + token, 'Active', 21600);
+        try {
+          sheet.getRange(i + 1, usedCol + 1).setValue(new Date().toISOString());
+        } catch (eTrack) {}
+        return true;
+      } else {
+        cache.put('apk_' + token, 'Revoked', 21600);
+        return false;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Universal API Gateway: GET Engine (Read & Analytics)
+ */
+function handleApiGatewayGet(e) {
+  try {
+    var params = e ? e.parameter : {};
+    var apiKey = params.api_key || '';
+
+    if (!authenticateApiKey(apiKey)) {
+      return createJsonResponse({
+        ok: false,
+        status: 401,
+        message: 'Unauthorized: API Key tidak valid atau telah dicabut.'
+      });
+    }
+
+    var action = (params.action || '').trim().toLowerCase();
+
+    // Custom Action: Alokasi Target Harian Akun (Dynamic Slot Allocation)
+    if (action === 'get_daily_targets') {
+      var accounts = readSheetAsJson('Accounts');
+      var pSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Published_Posts');
+      var pValues = pSheet ? pSheet.getDataRange().getValues() : [];
+      var pHeaders = pValues.length > 0 ? pValues[0] : [];
+      var targets = [];
+
+      for (var a = 0; a < accounts.length; a++) {
+        var acc = accounts[a];
+        if (acc.is_active !== 'TRUE') continue;
+
+        var dailyMax = Number(acc.daily_max_posts) || 30;
+        var publishedToday = getAccountTodayPublishedRootCount(acc.account_id, pValues, pHeaders, 'Asia/Jakarta');
+        var remainingQuota = Math.max(0, dailyMax - publishedToday);
+
+        var windows = [];
+        try {
+          windows = typeof acc.posting_windows === 'string' ? JSON.parse(acc.posting_windows) : (acc.posting_windows || []);
+        } catch (eWin) {
+          windows = [{ start: '08:00', end: '22:00' }];
+        }
+
+        var inCurrentWindow = isCurrentTimeInWindows(acc.posting_windows, 'Asia/Jakarta');
+
+        targets.push({
+          account_id: acc.account_id,
+          username: acc.username,
+          category: acc.category || 'General',
+          daily_max_posts: dailyMax,
+          published_today: publishedToday,
+          remaining_quota: remainingQuota,
+          in_active_window: inCurrentWindow,
+          posting_windows: windows
+        });
+      }
+
+      return createJsonResponse({
+        ok: true,
+        action: 'get_daily_targets',
+        count: targets.length,
+        data: targets
+      });
+    }
+
+    // Universal Action: Baca Tabel Database Bebas (read_table)
+    if (action === 'read_table') {
+      var tableName = params.table_name || '';
+      if (!tableName) {
+        return createJsonResponse({ ok: false, message: 'Parameter table_name wajib disertakan.' });
+      }
+
+      var rows = readSheetAsJson(tableName);
+      if (params.filter_col && params.filter_val !== undefined) {
+        var fCol = String(params.filter_col).trim();
+        var fVal = String(params.filter_val).trim();
+        rows = rows.filter(function(r) {
+          return String(r[fCol] || '').trim() === fVal;
+        });
+      }
+
+      return createJsonResponse({
+        ok: true,
+        action: 'read_table',
+        table: tableName,
+        count: rows.length,
+        data: rows
+      });
+    }
+
+    return createJsonResponse({
+      ok: false,
+      message: 'Action GET tidak dikenal. Gunakan action=read_table atau action=get_daily_targets.'
+    });
+
+  } catch (err) {
+    return createJsonResponse({ ok: false, error: err.message });
+  }
+}
+
+/**
+ * Universal API Gateway: POST Engine (Create, Update, Delete, Reschedule)
+ */
+function handleApiGatewayPost(e) {
+  try {
+    var rawContents = (e && e.postData && e.postData.contents) ? e.postData.contents : '{}';
+    var payload = {};
+    try {
+      payload = JSON.parse(rawContents);
+    } catch (parseErr) {
+      payload = (e && e.parameter) ? e.parameter : {};
+    }
+
+    var apiKey = payload.api_key || (e && e.parameter ? e.parameter.api_key : '');
+    if (!authenticateApiKey(apiKey)) {
+      return createJsonResponse({
+        ok: false,
+        status: 401,
+        message: 'Unauthorized: API Key tidak valid atau telah dicabut.'
+      });
+    }
+
+    var action = (payload.action || (e && e.parameter ? e.parameter.action : '') || '').trim().toLowerCase();
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+    // Universal Action: Read Table in POST
+    if (action === 'read_table') {
+      var tableName = payload.table_name || (e && e.parameter ? e.parameter.table_name : '') || '';
+      if (!tableName) {
+        return createJsonResponse({ ok: false, message: 'Parameter table_name wajib disertakan.' });
+      }
+
+      var targetSheet = ss.getSheetByName(tableName);
+      if (!targetSheet) {
+        return createJsonResponse({
+          ok: false,
+          status: 404,
+          message: 'Tabel ' + tableName + ' tidak ditemukan (Sheet not found).'
+        });
+      }
+
+      var rows = readSheetAsJson(tableName);
+
+      // Optional column filtering
+      var filterCol = payload.filter_col || (e && e.parameter ? e.parameter.filter_col : '');
+      var filterVal = (payload.filter_val !== undefined) ? payload.filter_val : (e && e.parameter ? e.parameter.filter_val : undefined);
+      if (filterCol && filterVal !== undefined) {
+        var fColStr = String(filterCol).trim();
+        var fValStr = String(filterVal).trim();
+        rows = rows.filter(function(r) {
+          return String(r[fColStr] || '').trim() === fValStr;
+        });
+      }
+
+      // Optional limit
+      var limit = payload.limit !== undefined ? payload.limit : (e && e.parameter ? e.parameter.limit : null);
+      if (limit !== null && limit !== undefined && !isNaN(Number(limit))) {
+        var limitNum = Math.max(0, parseInt(limit, 10));
+        rows = rows.slice(0, limitNum);
+      }
+
+      return createJsonResponse({
+        ok: true,
+        action: 'read_table',
+        table: tableName,
+        count: rows.length,
+        data: rows
+      });
+    }
+
+    // Universal CRUD: Create Row
+    if (action === 'create_row') {
+      var createTable = payload.table_name || '';
+      var rowData = payload.data || {};
+      if (!createTable) return createJsonResponse({ ok: false, message: 'Parameter table_name wajib diisi.' });
+
+      appendRowData(createTable, rowData);
+      return createJsonResponse({
+        ok: true,
+        message: 'Baris berhasil ditambahkan ke ' + createTable,
+        data: rowData
+      });
+    }
+
+    // Universal CRUD: Update Row
+    if (action === 'update_row') {
+      var updateTable = payload.table_name || '';
+      var idColName = payload.id_column || '';
+      var idVal = String(payload.id_value || '').trim();
+      var updateFields = payload.update_data || {};
+
+      if (!updateTable || !idColName || !idVal) {
+        return createJsonResponse({ ok: false, message: 'table_name, id_column, dan id_value wajib diisi.' });
+      }
+
+      var uSheet = ss.getSheetByName(updateTable);
+      if (!uSheet) return createJsonResponse({ ok: false, message: 'Tabel ' + updateTable + ' tidak ditemukan.' });
+
+      var uValues = uSheet.getDataRange().getValues();
+      if (uValues.length <= 1) return createJsonResponse({ ok: false, message: 'Tabel kosong.' });
+
+      var uHeaders = uValues[0];
+      var targetColIdx = uHeaders.indexOf(idColName);
+      if (targetColIdx === -1) return createJsonResponse({ ok: false, message: 'Kolom ' + idColName + ' tidak ditemukan.' });
+
+      var matchRow = -1;
+      for (var r = 1; r < uValues.length; r++) {
+        if (String(uValues[r][targetColIdx]).trim() === idVal) {
+          matchRow = r + 1;
+          break;
+        }
+      }
+
+      if (matchRow === -1) {
+        return createJsonResponse({ ok: false, message: 'Data baris dengan ' + idColName + '=' + idVal + ' tidak ditemukan.' });
+      }
+
+      for (var k in updateFields) {
+        var fIdx = uHeaders.indexOf(k);
+        if (fIdx >= 0) {
+          var valToWrite = updateFields[k];
+          if (typeof valToWrite === 'object' && valToWrite !== null) {
+            valToWrite = JSON.stringify(valToWrite);
+          }
+          uSheet.getRange(matchRow, fIdx + 1).setValue(valToWrite);
+        }
+      }
+
+      SpreadsheetApp.flush();
+      return createJsonResponse({
+        ok: true,
+        message: 'Baris ' + idColName + '=' + idVal + ' pada ' + updateTable + ' berhasil diperbarui.'
+      });
+    }
+
+    // Universal CRUD: Delete Row
+    if (action === 'delete_row') {
+      var delTable = payload.table_name || '';
+      var delIdCol = payload.id_column || '';
+      var delIdVal = String(payload.id_value || '').trim();
+
+      if (!delTable || !delIdCol || !delIdVal) {
+        return createJsonResponse({ ok: false, message: 'table_name, id_column, dan id_value wajib diisi.' });
+      }
+
+      var dSheet = ss.getSheetByName(delTable);
+      if (!dSheet) return createJsonResponse({ ok: false, message: 'Tabel ' + delTable + ' tidak ditemukan.' });
+
+      var dValues = dSheet.getDataRange().getValues();
+      if (dValues.length <= 1) return createJsonResponse({ ok: false, message: 'Tabel kosong.' });
+
+      var dHeaders = dValues[0];
+      var dColIdx = dHeaders.indexOf(delIdCol);
+      if (dColIdx === -1) return createJsonResponse({ ok: false, message: 'Kolom ' + delIdCol + ' tidak ditemukan.' });
+
+      var deletedCount = 0;
+      for (var dr = dValues.length - 1; dr >= 1; dr--) {
+        if (String(dValues[dr][dColIdx]).trim() === delIdVal) {
+          dSheet.deleteRow(dr + 1);
+          deletedCount++;
+        }
+      }
+
+      SpreadsheetApp.flush();
+      return createJsonResponse({
+        ok: true,
+        message: 'Berhasil menghapus ' + deletedCount + ' baris dari ' + delTable
+      });
+    }
+
+    // Custom Action: Otomatis Menjadwalkan Ulang Seluruh Antrean Gagal (reschedule_failed)
+    if (action === 'reschedule_failed') {
+      var pSheetFailed = ss.getSheetByName('Published_Posts');
+      var qSheetQueue = ss.getSheetByName('Queue_Posts');
+      if (!pSheetFailed || !qSheetQueue) {
+        return createJsonResponse({ ok: false, message: 'Tabel antrean tidak lengkap.' });
+      }
+
+      var pfValues = pSheetFailed.getDataRange().getValues();
+      if (pfValues.length <= 1) {
+        return createJsonResponse({ ok: true, message: 'Tidak ada postingan gagal.', count: 0 });
+      }
+
+      var pfHeaders = pfValues[0];
+      var stColIdx = pfHeaders.indexOf('status');
+      var errColIdx = pfHeaders.indexOf('error_log');
+      var schedColIdx = pfHeaders.indexOf('scheduled_at');
+      var thPostIdColIdx = pfHeaders.indexOf('threads_post_id');
+
+      var rescheduledCount = 0;
+      var nowMs = Date.now();
+
+      for (var pr = pfValues.length - 1; pr >= 1; pr--) {
+        var rowStatus = String(pfValues[pr][stColIdx] || '');
+        var threadsPostId = String(pfValues[pr][thPostIdColIdx] || '').trim();
+
+        if (rowStatus.indexOf('Failed') !== -1 && !threadsPostId) {
+          var rowDataCopy = [].concat(pfValues[pr]);
+          rowDataCopy[stColIdx] = 'Scheduled';
+          rowDataCopy[errColIdx] = '';
+          rowDataCopy[schedColIdx] = new Date(nowMs + (rescheduledCount + 1) * 3 * 60 * 1000).toISOString();
+
+          qSheetQueue.appendRow(rowDataCopy);
+          pSheetFailed.deleteRow(pr + 1);
+          rescheduledCount++;
+        }
+      }
+
+      SpreadsheetApp.flush();
+      return createJsonResponse({
+        ok: true,
+        action: 'reschedule_failed',
+        message: 'Berhasil menjadwalkan ulang ' + rescheduledCount + ' postingan gagal ke antrean aktif.',
+        count: rescheduledCount
+      });
+    }
+
+    return createJsonResponse({
+      ok: false,
+      message: 'Action POST tidak dikenal. Pilihan: read_table, create_row, update_row, delete_row, reschedule_failed.'
+    });
+
+  } catch (err) {
+    return createJsonResponse({ ok: false, error: err.message });
   }
 }
 
@@ -3625,7 +4135,6 @@ function processPublishingQueue() {
 
     var now = new Date();
     var nowMs = now.getTime();
-    var FIVE_MIN_MS = 5 * 60 * 1000;
 
     // Lacak kelompok yang terputus (aborted) dalam siklus eksekusi ini
     var abortedGroupIds = {};
@@ -3668,102 +4177,90 @@ function processPublishingQueue() {
         }
       }
 
-      // THROTTLING & JALUR VIP: Batas Kuota Harian HANYA berlaku untuk Utas #1 (seq === 1).
-      // Utas sambungan (#2+) mendapat JALUR VIP: langsung diterbitkan saat syarat rilis tercapai!
-      if (seq === 1 && account) {
-        var dailyMax = Number(account.daily_max_posts) || 30;
-        var pValuesLatest = pSheet.getDataRange().getValues();
-        var todayPublishedRootCount = getAccountTodayPublishedRootCount(accId, pValuesLatest, pHeaders, 'Asia/Jakarta');
-        if (todayPublishedRootCount >= dailyMax) {
-          Logger.log('Akun @' + (account.username || accId) + ' mencapai limit harian (' + todayPublishedRootCount + '/' + dailyMax + '). Menunda Utas #1 ke hari berikutnya.');
-          continue;
-        }
-
-        // BYPASS JENDELA WAKTU: Pos dengan jadwal eksplisit yang sudah tiba waktunya langsung dieksekusi tanpa tertahan jendela
-        var isSchedArrived = false;
-        if (schedAtStr) {
-          var sDate = new Date(schedAtStr);
-          if (!isNaN(sDate.getTime()) && nowMs >= sDate.getTime()) {
-            isSchedArrived = true;
-          }
-        }
-
-        if (!isSchedArrived) {
-          var inWindow = isCurrentTimeInWindows(account.posting_windows, 'Asia/Jakarta');
-          if (!inWindow) {
-            continue;
-          }
-        }
-      }
-
       var shouldPublish = false;
 
-      // 1. Evaluasi Status 'Scheduled' (Logika Jendela Toleransi 5 Menit)
+      // 1. EVALUASI JADWAL WAKTU TIBA DI PALING ATAS
       if (status === 'Scheduled') {
-        var schedDate = schedAtStr ? new Date(schedAtStr) : null;
-        if (!schedDate || isNaN(schedDate.getTime())) {
-          continue;
-        }
+        var hasExplicitSchedule = false;
+        var schedMs = 0;
 
-        var schedMs = schedDate.getTime();
-        var diffMs = nowMs - schedMs;
-
-        // Jadwal belum tiba
-        if (nowMs < schedMs) {
-          continue;
-        }
-
-        // Keterlambatan sudah lebih dari 5 menit -> BATALKAN eksekusi otomatis & arsipkan ke Published_Posts
-        var todayStartMs = new Date(Utilities.formatDate(now, 'Asia/Jakarta', 'yyyy/MM/dd 00:00:00')).getTime();
-        if (diffMs > FIVE_MIN_MS && schedMs >= todayStartMs) {
-          var missedMsg = 'Jadwal terlewat > 5 menit (' + Math.round(diffMs / 60000) + ' mnt). Eksekusi otomatis dibatalkan.';
-          qData[r][stCol] = 'Failed - Missed Schedule';
-          qData[r][errCol] = missedMsg;
-          pSheet.appendRow(qData[r]);
-          rowsToDelete.push(r + 1);
-
-          var abortMsg = 'Dibatalkan otomatis: Utas #' + seq + ' terlewat jadwal.';
-          abortedGroupIds[rowGId] = abortMsg;
-          archiveSubsequentChainsToPublished(qSheet, pSheet, qData, rowGId, seq, abortMsg, stCol, errCol, gIdCol, seqCol, rowsToDelete);
-          continue;
-        }
-
-        // Waktu sekarang >= jadwal_terbit DAN keterlambatan <= 5 menit: Siap rilis!
-        // Untuk Utas #2 dan seterusnya, periksa ketersediaan reply_to_meta_id
-        if (seq > 1 && !replyMetaId) {
-          // Cari parent di Published_Posts secara mundur (prioritas entri terbaru)
-          var pubRows = readSheetAsJson('Published_Posts');
-          var prevPub = null;
-          for (var pbIdx = pubRows.length - 1; pbIdx >= 0; pbIdx--) {
-            var pb = pubRows[pbIdx];
-            if (String(pb.chain_group_id || pb.post_id) === rowGId && Number(pb.sequence_order) === seq - 1 && pb.threads_post_id) {
-              prevPub = pb;
-              break;
-            }
+        if (schedAtStr) {
+          var sDate = (schedAtStr instanceof Date) ? schedAtStr : new Date(schedAtStr);
+          if (!isNaN(sDate.getTime())) {
+            hasExplicitSchedule = true;
+            schedMs = sDate.getTime();
           }
+        }
 
-          if (prevPub && prevPub.threads_post_id) {
-            replyMetaId = String(prevPub.threads_post_id).trim();
-            qSheet.getRange(r + 1, replyCol + 1).setValue(replyMetaId);
-            qData[r][replyCol] = replyMetaId;
-            SpreadsheetApp.flush();
-            shouldPublish = true;
-          } else {
-            // Induk belum terbit atau gagal -> Abort utas sambungan ini & arsipkan ke Published_Posts
-            var parentMissingMsg = 'Dibatalkan otomatis: Utas #' + (seq - 1) + ' belum terbit di Threads.';
-            qData[r][stCol] = 'Failed - Parent Error';
-            qData[r][errCol] = parentMissingMsg;
-            pSheet.appendRow(qData[r]);
-            rowsToDelete.push(r + 1);
-            abortedGroupIds[rowGId] = parentMissingMsg;
-            archiveSubsequentChainsToPublished(qSheet, pSheet, qData, rowGId, seq, parentMissingMsg, stCol, errCol, gIdCol, seqCol, rowsToDelete);
+        if (hasExplicitSchedule) {
+          // Jika waktu jadwal belum tiba, lewati
+          if (nowMs < schedMs) {
             continue;
           }
+
+          // WAKTU JADWAL SUDAH TIBA (nowMs >= schedMs): Prioritas Mutlak!
+          // ABAIKAN Batas Kuota Harian & Jendela Waktu Posting.
+          // Untuk Utas #2 dan seterusnya, periksa ketersediaan reply_to_meta_id
+          if (seq > 1 && !replyMetaId) {
+            var pubRows = readSheetAsJson('Published_Posts');
+            var prevPub = null;
+            var prevFailed = false;
+            for (var pbIdx = pubRows.length - 1; pbIdx >= 0; pbIdx--) {
+              var pb = pubRows[pbIdx];
+              if (String(pb.chain_group_id || pb.post_id) === rowGId && Number(pb.sequence_order) === seq - 1) {
+                if (pb.threads_post_id) {
+                  prevPub = pb;
+                  break;
+                } else if (String(pb.status || '').indexOf('Failed') !== -1) {
+                  prevFailed = true;
+                  break;
+                }
+              }
+            }
+
+            if (prevPub && prevPub.threads_post_id) {
+              replyMetaId = String(prevPub.threads_post_id).trim();
+              qSheet.getRange(r + 1, replyCol + 1).setValue(replyMetaId);
+              qData[r][replyCol] = replyMetaId;
+              SpreadsheetApp.flush();
+              shouldPublish = true;
+            } else if (prevFailed) {
+              var parentMissingMsg = 'Dibatalkan otomatis: Utas #' + (seq - 1) + ' gagal terbit di Threads.';
+              qData[r][stCol] = 'Failed - Parent Error';
+              qData[r][errCol] = parentMissingMsg;
+              pSheet.appendRow(qData[r]);
+              rowsToDelete.push(r + 1);
+              abortedGroupIds[rowGId] = parentMissingMsg;
+              archiveSubsequentChainsToPublished(qSheet, pSheet, qData, rowGId, seq, parentMissingMsg, stCol, errCol, gIdCol, seqCol, rowsToDelete);
+              continue;
+            } else {
+              // Utas induk belum selesai rilis -> tunda ke eksekusi cron berikutnya
+              continue;
+            }
+          } else {
+            shouldPublish = true;
+          }
+
         } else {
+          // 2. THROTTLING HANYA BERLAKU JIKA TANPA JADWAL EKSPLISIT
+          if (seq === 1 && account) {
+            var dailyMax = Number(account.daily_max_posts) || 30;
+            var pValuesLatest = pSheet.getDataRange().getValues();
+            var todayPublishedRootCount = getAccountTodayPublishedRootCount(accId, pValuesLatest, pHeaders, 'Asia/Jakarta');
+            if (todayPublishedRootCount >= dailyMax) {
+              Logger.log('Akun @' + (account.username || accId) + ' mencapai limit harian (' + todayPublishedRootCount + '/' + dailyMax + '). Menunda Utas #1.');
+              continue;
+            }
+
+            var inWindow = isCurrentTimeInWindows(account.posting_windows, 'Asia/Jakarta');
+            if (!inWindow) {
+              continue;
+            }
+          }
           shouldPublish = true;
         }
 
-      // 2. Evaluasi Status 'Waiting Views' (Target Views)
+      // 3. Evaluasi Status 'Waiting Views' (Target Views)
       } else if (status === 'Waiting Views' && pubMode === 'target_views') {
         var pubRows2 = readSheetAsJson('Published_Posts');
         var rootPub = pubRows2.find(function(pb) {
